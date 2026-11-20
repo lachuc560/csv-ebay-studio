@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>CSV Studio Crawler</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <header class="app-header">
+      <div class="brand-copy">
+        <strong>CSV Studio Crawler</strong>
+        <span id="pageHost">Trang đang mở</span>
+      </div>
+    </header>
+
+    <main>
+      <section class="connection-row" aria-label="Trạng thái kết nối">
+        <span id="connectionDot" class="status-dot"></span>
+        <span id="connectionText">Chưa kết nối</span>
+        <button id="openSettings" class="text-button" type="button" aria-expanded="false" aria-controls="settings">Cấu hình</button>
+      </section>
+
+      <section class="card">
+        <h1>Crawl sản phẩm trên trang này</h1>
+        <p class="hint">Mở trang chi tiết một sản phẩm, chọn tiền tệ USD, rồi bấm nút. Extension đọc tiêu đề, ảnh, giá và tồn kho của từng biến thể rồi gửi vào tool. Gửi lại cùng sản phẩm thì giá và tồn được cập nhật, phần team đã sửa vẫn giữ.</p>
+        <button id="crawl" class="primary-button" type="button">
+          <span class="spinner" aria-hidden="true"></span>
+          <span id="crawlLabel">Crawl trang này</span>
+        </button>
+        <div id="status" class="status" role="status" aria-live="polite" hidden></div>
+        <a id="openTool" class="link" target="_blank" rel="noopener" hidden>Mở tool CSV Listing eBay</a>
+      </section>
+
+      <form id="settings" class="card" hidden novalidate>
+        <h2>Cấu hình kết nối</h2>
+        <label for="toolUrl">Địa chỉ tool</label>
+        <input id="toolUrl" type="url" placeholder="https://csv.tencongty.com" autocomplete="off" />
+        <label for="apiKey">Khóa crawl</label>
+        <input id="apiKey" type="password" placeholder="csvk_..." autocomplete="off" />
+        <p class="hint">Tạo khóa trong tool, mục Khóa crawl. Mỗi người một khóa riêng.</p>
+        <p id="settingsError" class="field-error" role="alert" hidden></p>
+        <button id="save" class="primary-button" type="submit"><span class="spinner" aria-hidden="true"></span><span>Lưu và kiểm tra</span></button>
+      </form>
+    </main>
+    <script src="dist/popup.js"></script>
+  </body>
+</html>

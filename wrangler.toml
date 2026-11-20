@@ -1,0 +1,47 @@
+# Cloudflare Pages — CSV Listing eBay (web tham chiếu / deploy).
+# Xem README.md mục Deploy để chạy từng bước bằng tay trên dashboard/CLI.
+# KHÔNG commit khóa hay file .dev.vars vào repo.
+
+name = "csv-ebay-studio"
+
+# Thư mục build output của Pages: web tĩnh trong public/ (index.html, app.js, core.js).
+pages_build_output_dir = "public"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "csv-ebay-studio"
+# Điền database_id sau khi chạy `npx wrangler d1 create csv-ebay-studio`
+# (lấy id từ output của lệnh đó). Không có database_id thì `wrangler pages deploy`
+# vẫn chạy được nhưng binding DB sẽ không trỏ đúng database.
+database_id = "REPLACE_WITH_D1_DATABASE_ID"
+migrations_dir = "migrations"
+
+# --- Cloudflare R2 cho ảnh sản phẩm (v9.1) — CHỈ GHI CHÚ, KHÔNG BẮT BUỘC ---
+# Tool upload ảnh lên R2 bằng S3-compatible API qua env secrets
+# (CLOUDFLARE_R2_*, đặt bằng `wrangler pages secret put`) — cách này chạy
+# được cả dev local lẫn Pages, KHÔNG cần binding dưới đây. Binding R2 chỉ
+# là lựa chọn thay thế nếu sau này muốn code dùng thẳng binding (khi đó
+# cần sửa server/cloudflare-images.mjs để đọc env.R2_BUCKET thay vì S3
+# API); hiện tại KHÔNG bật binding để tránh nhầm lẫn. Muốn bật thì bỏ
+# comment khối dưới (điền đúng tên bucket đã tạo) và deploy lại:
+# [[r2_buckets]]
+# binding = "R2_BUCKET"
+# bucket_name = "csv-images"
+# Lưu ý: bật public access cho bucket (R2 → bucket → Settings → Public
+# access) hoặc nối domain riêng (vd images.tencongty.com) thì ảnh mới mở
+# được bằng link công khai — xem README.md mục "Ảnh trên Cloudflare (R2)".
+
+# --- Cấu hình làm trên Cloudflare dashboard, KHÔNG có trong file này ---
+# 1. Cloudflare Access — 2 application:
+#    - App chính: bảo vệ toàn bộ site (vd https://csv.tencongty.com/*),
+#      chỉ email team mới vào được.
+#    - App Bypass: chỉ cho đường /api/ingest/* đi qua không cần đăng nhập
+#      Access (extension và crawler dùng Bearer csvk_... để tự xác thực).
+#      Nếu thiếu app này, extension báo "Tool chặn extension ở bước đăng nhập"
+#      (mã access_blocked trong dist/popup.js).
+# 2. Rate Limiting (Security > WAF > Rate limiting rules): vd 60 request/phút
+#    cho mỗi IP trên /api/ingest/*, để một crawler lỗi không làm sập tool.
+# 3. Secrets (KHÔNG ghi vào file này): đặt bằng
+#    `npx wrangler pages secret put <TÊN>` — vd khóa ký session / API key AI.
+#    Khóa crawl csvk_... KHÔNG đặt ở đây: nó nằm trong bảng api_keys của D1,
+#    tạo trong web ở tab "Khóa crawl".

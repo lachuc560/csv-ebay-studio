@@ -1,0 +1,196 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>CSV Listing eBay — Bản tham chiếu</title>
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 0; color: #1a1a1a; }
+    .ref-banner { background: #fff3cd; border-bottom: 2px solid #e6a800; padding: 10px 16px; font-size: 14px; }
+    .ref-banner strong { color: #7a5b00; }
+    header { padding: 12px 16px; border-bottom: 1px solid #ddd; }
+    nav { display: flex; gap: 8px; padding: 10px 16px; flex-wrap: wrap; }
+    nav button { padding: 8px 14px; cursor: pointer; }
+    nav button[aria-selected="true"] { font-weight: 700; }
+    main { padding: 16px; }
+    section[hidden] { display: none; }
+    table { border-collapse: collapse; width: 100%; margin-top: 12px; }
+    th, td { border: 1px solid #ccc; padding: 6px 8px; text-align: left; vertical-align: top; }
+    tr[data-id] { cursor: pointer; }
+    tr[data-id]:hover { background: #f2f2f2; }
+    label { display: block; margin: 8px 0 2px; }
+    input, textarea, select { padding: 6px; width: 100%; max-width: 480px; box-sizing: border-box; }
+    button { margin-top: 10px; }
+    .error { color: #b00020; }
+    .ok { color: #0a7a2f; }
+    .muted { color: #666; font-size: 13px; }
+    #detail { border: 1px solid #ccc; padding: 12px; margin-top: 16px; }
+    code.key-once { background: #f2f2f2; padding: 4px 8px; word-break: break-all; }
+  </style>
+</head>
+<body>
+  <div class="ref-banner" role="note">
+    <strong>Bản tham chiếu — user đã có web nhân sự riêng.</strong>
+    Web này chỉ là bản tối thiểu để đối chiếu contract <code>/api/ingest</code> và
+    luật trong <code>public/core.js</code>; không thay thế web nhân sự thật của user.
+    Xem <code>README.md</code> và <code>record-format.md</code>.
+  </div>
+  <header>
+    <h1>CSV Listing eBay</h1>
+    <p class="muted">Biến sản phẩm nhiều site thành file CSV đăng bán trên eBay US. Chỉ tạo CSV để upload lên Seller Hub — không đăng trực tiếp lên eBay.</p>
+    <p class="muted">Dữ liệu đã crawl được lưu tự động xuống file <code>data/local-data.json</code> trên máy bạn — tắt Terminal rồi mở lại web vẫn còn sản phẩm và khóa crawl, không phải crawl lại. Chỉ có key AI và khóa eBay là vẫn mất khi restart server (chỉ ở RAM), phải dán lại.</p>
+    <p id="status" class="muted" role="status">Đang tải dữ liệu…</p>
+  </header>
+  <nav aria-label="Tab chính">
+    <button type="button" data-tab="browse" aria-selected="true">Duyệt</button>
+    <button type="button" data-tab="ai" aria-selected="false">AI gợi ý</button>
+    <button type="button" data-tab="config" aria-selected="false">Cấu hình giá</button>
+    <button type="button" data-tab="export" aria-selected="false">Xuất CSV</button>
+    <button type="button" data-tab="keys" aria-selected="false">Khóa crawl</button>
+    <button type="button" data-tab="import" aria-selected="false">Nhập</button>
+  </nav>
+  <main>
+    <section id="tab-browse">
+      <h2>Duyệt sản phẩm</h2>
+      <p class="muted"><span id="count"></span> — bấm vào một dòng để xem chi tiết (đủ tuỳ chọn, UPC, giá ước tính, crawl bị cắt).</p>
+      <button type="button" id="aiBulkBtn">Gợi ý AI hàng loạt</button>
+      <p class="muted">Gọi AI cho từng sản phẩm đang hiển thị; chi phí tùy model và lượng dữ liệu. Bấm "Áp dụng" từng gợi ý để lưu vào sản phẩm. Với Gemini, tool mặc định giãn ~4 giây/lần gọi; quota thực tế phụ thuộc model và project. Nếu gặp HTTP 429, tool dừng lượt gọi: đợi 1 phút rồi thử lại; nếu vẫn lỗi, kiểm tra quota tại nhà cung cấp. Sản phẩm đã có gợi ý sẽ được bỏ qua khi chạy tiếp.</p>
+      <button type="button" id="aiGroupBtn">AI phân loại + xuất CSV theo nhóm</button>
+      <p class="muted">AI gom các sản phẩm giống nhau / cùng loại vào chung 1 nhóm (gối, đèn bàn, gương, đồ phòng tắm…), tự tra mã eBay cho từng nhóm và tự áp mã vào sản phẩm, rồi tự tải 1 file CSV cho mỗi nhóm có template (hiện chỉ nhóm gối 20563). Nhóm chưa có mã thì vẫn ra file nháp DRAFT. Nhóm AI đã gom được lưu vào sản phẩm để lần sau mở lại vẫn còn.</p>
+      <button type="button" id="ebayEnrichAllBtn">Tìm listing eBay cho tất cả sản phẩm chưa có số liệu</button>
+      <p class="muted">Tự động tìm listing eBay khớp cho từng sản phẩm (theo tên + giá) qua eBay Browse API rồi điền số đã bán (ước tính) + số người theo dõi — không cần dán link hay dán số. Cần khóa eBay (tab "AI gợi ý" → mục eBay Taxonomy). Gặp giới hạn request (429) thì dừng, đợi 1 phút rồi bấm lại.</p>
+      <p id="ebayEnrichStatus" role="status"></p>
+      <p id="aiGroupStatus" role="status"></p>
+      <div id="aiGroupResults"></div>
+      <div id="ebayResolveResults"></div>
+      <p id="aiBulkStatus" role="status"></p>
+      <div id="aiBulkResults"></div>
+      <div id="browseWrap"><table id="browseTable"></table></div>
+      <div id="detail" hidden></div>
+    </section>
+
+    <section id="tab-ai" hidden>
+      <h2>AI gợi ý</h2>
+      <p class="muted">AI chỉ <strong>gợi ý</strong> — phân loại + điền Type khi tên không chứa từ khoá, điền item specifics từ mô tả/specs, tối ưu title ≤80 ký tự. Bạn xem gợi ý rồi bấm <strong>Áp dụng</strong> mới lưu vào sản phẩm. AI <strong>không</strong> quyết giá bán (dùng GIÁ BÁN trong sheet khi có), không điền Location/Dispatch/Returns/Profile. Chi tiết xem <code>docs/ai.md</code>.</p>
+      <p id="aiStatus" role="status">Đang kiểm tra trạng thái AI…</p>
+      <form id="aiConfigForm">
+        <label for="aiProvider">Nhà cung cấp</label>
+        <select id="aiProvider" name="provider">
+          <option value="openai">OpenAI (mặc định: gpt-4o-mini)</option>
+          <option value="gemini">Google Gemini (mặc định: gemini-2.5-flash)</option>
+        </select>
+        <label for="aiModel">Model (để trống = dùng mặc định của nhà cung cấp)</label>
+        <input id="aiModel" name="model" type="text" autocomplete="off" placeholder="vd gpt-4o-mini hoặc gemini-2.5-flash" />
+        <label for="aiBaseUrl">Base URL (chỉ đổi khi dùng API tương thích OpenAI, để trống = mặc định)</label>
+        <input id="aiBaseUrl" name="baseUrl" type="text" autocomplete="off" placeholder="vd https://api.openai.com/v1/chat/completions" />
+        <label for="aiKey">Khóa API (key chỉ gửi lên server, lưu trong RAM, mất khi restart server — không lưu trên trình duyệt)</label>
+        <input id="aiKey" name="apiKey" type="password" autocomplete="off" placeholder="sk-… (OpenAI) hoặc AQ.… / AIza… (Gemini)" />
+        <button type="submit">Lưu key</button>
+        <button type="button" id="aiClearBtn">Xoá key đã dán trong web</button>
+      </form>
+      <p id="aiConfigMsg" role="status"></p>
+      <p class="muted">Lấy key ở đâu: OpenAI — <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener">platform.openai.com → API keys</a>; Gemini — <a href="https://aistudio.google.com" target="_blank" rel="noopener">Google AI Studio → Get API key</a> (miễn phí có giới hạn). Muốn key dùng lâu dài: đặt biến môi trường <code>AI_API_KEY</code> trong file <code>.env</code> (dev local) hoặc <code>wrangler pages secret put AI_API_KEY</code> (khi deploy) — key trong env được ưu tiên hơn key dán ở đây. Key trong web chỉ có tác dụng trong phiên chạy của server, và không bao giờ được đưa vào extension.</p>
+
+      <h3>eBay Taxonomy — tra mã danh mục thật từ eBay (v8)</h3>
+      <p class="muted">Mã danh mục dùng để xuất file CSV upload được <strong>chỉ lấy từ Taxonomy API của eBay</strong> (đã xác minh) hoặc từ template thật bạn nạp vào. Mã do AI đoán chỉ là phỏng đoán chưa xác minh, không bao giờ ghi vào cột Category. Cần tài khoản eBay Developers (miễn phí) để lấy App ID + Cert ID — xem <code>docs/ebay-taxonomy.md</code>.</p>
+      <p id="ebayStatus" role="status">Đang kiểm tra trạng thái eBay Taxonomy…</p>
+      <form id="ebayConfigForm">
+        <label for="ebayEnvironment">Môi trường</label>
+        <select id="ebayEnvironment" name="environment">
+          <option value="production">Production — api.ebay.com (danh mục thật, dùng để đăng bán)</option>
+          <option value="sandbox">Sandbox — api.sandbox.ebay.com (thử nghiệm, cần khóa sandbox riêng)</option>
+        </select>
+        <label for="ebayAppId">App ID (Client ID) — tài khoản eBay Developers</label>
+        <input id="ebayAppId" name="appId" type="password" autocomplete="off" placeholder="vd: YourName-xxx-PRD-xxxxxxxx-xxxxxxx" />
+        <label for="ebayCertId">Cert ID (Client Secret) — chỉ gửi lên server, lưu trong RAM, mất khi restart server</label>
+        <input id="ebayCertId" name="certId" type="password" autocomplete="off" placeholder="vd: PRD-xxxxxxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" />
+        <button type="submit">Lưu khóa eBay</button>
+        <button type="button" id="ebayCheckBtn">Kiểm tra kết nối</button>
+        <button type="button" id="ebayClearBtn">Xoá khóa đã dán trong web</button>
+      </form>
+      <p id="ebayConfigMsg" role="status"></p>
+      <p class="muted">Muốn khóa dùng lâu dài: đặt <code>EBAY_APP_ID</code> + <code>EBAY_CERT_ID</code> trong file <code>.env</code> (dev local) hoặc <code>wrangler pages secret put EBAY_APP_ID</code> / <code>EBAY_CERT_ID</code> (khi deploy). Khóa trong env được ưu tiên hơn khóa dán ở đây. <strong>Không gửi khóa eBay trong chat</strong> — chỉ dán vào ô nhập trong web.</p>
+    </section>
+
+    <section id="tab-config" hidden>
+      <h2>Cấu hình giá</h2>
+      <form id="configForm">
+        <label for="markupPct">Markup % lợi nhuận (vd 0.35 = 35%)</label>
+        <input id="markupPct" name="markupPct" type="number" step="0.01" min="0" />
+        <label for="ebayFeePct">Phí eBay % (vd 0.13 = 13%)</label>
+        <input id="ebayFeePct" name="ebayFeePct" type="number" step="0.01" min="0" max="1" />
+        <label for="shippingCost">Phí ship (USD)</label>
+        <input id="shippingCost" name="shippingCost" type="number" step="0.01" min="0" />
+        <label for="taxPct">Thuế % (vd 0 = không thuế)</label>
+        <input id="taxPct" name="taxPct" type="number" step="0.01" min="0" max="1" />
+        <button type="submit">Lưu cấu hình</button>
+      </form>
+      <p id="configMsg" role="status"></p>
+      <p class="muted">Giá bán = (giá nguồn + ship + thuế) × (1 + markup) ÷ (1 − phí eBay), làm tròn .99 (xem <code>calcSellPrice</code> trong <code>core.js</code>).</p>
+    </section>
+
+    <section id="tab-export" hidden>
+      <h2>Xuất CSV eBay</h2>
+      <p>Quy trình: <strong>đọc sản phẩm → tra các trường theo Category ID eBay → điền dữ liệu nguồn → xuất CSV để kiểm tra.</strong> Mỗi SKU còn hàng nằm trên một dòng riêng.</p>
+      <p class="muted">App ID + Cert ID giúp lấy danh mục và các trường sản phẩm từ eBay. Tool dùng các trường này cùng mẫu cột CSV để điền dữ liệu; API không trả nguyên file mẫu Seller Hub. Có thể nạp mẫu Seller Hub của seller ở phía dưới.</p>
+      <p class="muted">Thông tin riêng của shop như nơi gửi hàng, vận chuyển và đổi trả được để trống cho seller điền sau. Phần kiểm tra bên dưới tập trung vào dữ liệu sản phẩm và các trường eBay yêu cầu.</p>
+      <h3>Điền template theo Category ID</h3>
+      <p class="muted">Chọn sản phẩm đã đọc từ extension và nhập mã danh mục eBay. Tool tra trường bắt buộc, điền dữ liệu đã có và chỉ rõ từng SKU còn thiếu thông tin. Category ID là mã danh mục, khác với Item ID của một listing.</p>
+      <form id="categoryTemplateForm">
+        <label for="categoryProductSelect">Sản phẩm đã đọc</label>
+        <select id="categoryProductSelect" required><option value="">Chưa có sản phẩm</option></select>
+        <label for="categoryIdInput">Category ID eBay</label>
+        <input id="categoryIdInput" inputmode="numeric" pattern="[0-9]+" required placeholder="Nhập mã danh mục" />
+        <button id="categoryPrepareBtn" type="submit">Tra mã &amp; tải CSV</button>
+      </form>
+      <p class="muted">Bấm nút trên để tra danh mục và tải file. Nếu thiếu giá bán hoặc tỷ giá, tool vẫn xuất dữ liệu sản phẩm và để trống giá cần bổ sung.</p>
+      <p id="categoryPrepareStatus" role="status"></p>
+      <button id="downloadCategoryCsvBtn" type="button" disabled>Tải lại CSV vừa tạo</button>
+      <div id="categoryTemplatePreview"></div>
+      <p><span id="exportCount"></span></p>
+      <details><summary>CSV cơ bản để đối chiếu dữ liệu</summary><p>File này chưa đối chiếu đủ các trường bắt buộc theo danh mục. Dùng luồng tra Category ID ở trên để chuẩn bị file listing.</p><button type="button" id="downloadCsv">Tải CSV cơ bản — cần kiểm tra</button></details>
+      <h3>Xuất CSV theo nhóm đã tra danh mục</h3>
+      <p class="muted">Mẫu gối 20563 có sẵn. Với danh mục khác đã xác minh qua eBay, tool dùng phần cột chung và thêm trường sản phẩm của danh mục đó; không cần tải thủ công mẫu cho từng sản phẩm. Mỗi nhóm tải một file riêng. Seller vẫn cần kiểm tra các mục còn thiếu và kết quả xử lý của Seller Hub.</p>
+      <label for="templateFile">Nạp mẫu CSV Seller Hub của seller (tùy chọn)</label>
+      <input id="templateFile" type="file" accept=".csv" />
+      <p id="templateMsg" role="status"></p>
+      <div id="groupList"></div>
+      <button type="button" id="downloadGroupedBtn">Xuất CSV theo nhóm</button>
+      <p id="exportMsg" role="status"></p>
+      <p>Để lấy mẫu gốc: vào <a href="https://www.ebay.com/sh/reports/uploads" target="_blank" rel="noopener">Seller Hub → Reports → Upload</a> → Get template → Listings → Create new listings → Download. Sau khi điền đủ thông tin, dùng Upload template tại đó và xem báo cáo xử lý. Nên thử một sản phẩm trước.</p>
+      <h3>File research (số liệu tham khảo — không upload Seller Hub)</h3>
+      <p class="muted">1 file riêng cho mỗi nhóm, tên <code>research-&lt;nhóm&gt;.csv</code>: Title, URL gốc, Giá bán lẻ, Giá bán eBay (GIÁ BÁN), Đã bán, Người theo dõi, CategoryId, Link listing eBay, Điểm khớp. Cột Đã bán (ước tính) / Người theo dõi là TỔNG cả listing eBay (không chia màu/size); trống khi chưa có số liệu. File này chỉ để seller xem trước khi tạo CSV upload — không đưa cột lạ vào file upload Seller Hub.</p>
+      <button type="button" id="downloadResearchBtn">Xuất file research</button>
+      <p id="researchMsg" role="status"></p>
+    </section>
+
+    <section id="tab-keys" hidden>
+      <h2>Khóa crawl</h2>
+      <p class="muted">Mỗi người / mỗi crawler một khóa riêng. Khóa chỉ hiện <strong>một lần</strong> lúc tạo — lưu lại ngay, mất thì tạo khóa mới.</p>
+      <form id="keyForm">
+        <label for="keyName">Tên khóa (vd tên người dùng hoặc tên crawler)</label>
+        <input id="keyName" name="name" type="text" autocomplete="off" placeholder="vd: seller-a" />
+        <button type="submit">Tạo khóa</button>
+      </form>
+      <p id="keyMsg" role="alert"></p>
+      <p id="keyOnce" hidden>Khóa mới (chỉ hiện một lần): <code class="key-once" id="keyOnceValue"></code></p>
+      <h3>Khóa đã tạo</h3>
+      <ul id="keyList"></ul>
+    </section>
+
+    <section id="tab-import" hidden>
+      <h2>Nhập records JSON</h2>
+      <p class="muted">Dán mảng JSON records theo <code>record-format.md</code>, nhập khóa crawl <code>csvk_…</code> rồi gửi lên <code>POST /api/ingest/records</code>. Có thể bấm "Kiểm ping" trước để chắc khóa còn dùng được (<code>GET /api/ingest/ping</code>).</p>
+      <label for="ingestKey">Khóa crawl</label>
+      <input id="ingestKey" type="password" autocomplete="off" placeholder="csvk_..." />
+      <button type="button" id="pingBtn">Kiểm ping</button>
+      <span id="pingMsg" role="status"></span>
+      <label for="recordsJson">Records JSON (mảng)</label>
+      <textarea id="recordsJson" rows="12" placeholder='[{"source_site": "oglmove.com", "source_product_id": "123", "title": "...", "variants": []}]'></textarea>
+      <button type="button" id="importBtn">Gửi records</button>
+      <p id="importMsg" role="status"></p>
+    </section>
+  </main>
+  <script type="module" src="./app.js"></script>
+</body>
+</html>

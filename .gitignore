@@ -1,0 +1,12 @@
+node_modules/
+.dev.vars*
+.wrangler/
+/dist/
+.env
+.env.*
+!.env.example
+data/
+server/.ai-config*
+*.log
+/exports/
+/examples/

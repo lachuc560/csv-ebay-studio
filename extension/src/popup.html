@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>CSV Studio Crawler</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <header class="app-header">
+      <div class="brand-copy">
+        <strong>CSV Studio Crawler</strong>
+        <span id="pageHost">Trang đang mở</span>
+      </div>
+    </header>
+
+    <main>
+      <section class="connection-row" aria-label="Trạng thái kết nối">
+        <span id="connectionDot" class="status-dot"></span>
+        <span id="connectionText">Chưa kết nối</span>
+        <button id="openSettings" class="text-button" type="button" aria-expanded="false" aria-controls="settings">Cấu hình</button>
+      </section>
+
+      <section class="card">
+        <h1>Crawl sản phẩm trên trang này</h1>
+        <p class="hint">Mở trang chi tiết một sản phẩm, chọn tiền tệ USD, rồi bấm nút. AI đọc toàn bộ trang (tên, giá, ảnh, mô tả, màu/size từng biến thể) rồi gửi về tool để trích xuất có cấu trúc. Size/màu lấy từ trang gốc, thiếu thì để trống, không bịa. Cần key AI trong web để AI trích xuất; chưa có key thì tool dùng dữ liệu đọc theo luật.</p>
+        <button id="aiCrawl" class="primary-button" type="button">
+          <span class="spinner" aria-hidden="true"></span>
+          <span id="aiCrawlLabel">Crawl AI trang này</span>
+        </button>
+        <div id="status" class="status" role="status" aria-live="polite" hidden></div>
+        <div id="crawledWrap" hidden>
+          <h2>Đã cào được</h2>
+          <ul id="crawledList" class="crawled-list"></ul>
+        </div>
+        <a id="openTool" class="link" target="_blank" rel="noopener" hidden>Mở tool CSV Listing eBay</a>
+      </section>
+
+      <form id="settings" class="card" hidden novalidate>
+        <h2>Cấu hình kết nối</h2>
+        <label for="toolUrl">Địa chỉ tool</label>
+        <input id="toolUrl" type="url" placeholder="https://csv.tencongty.com" autocomplete="off" />
+        <label for="apiKey">Khóa crawl</label>
+        <input id="apiKey" type="password" placeholder="csvk_..." autocomplete="off" />
+        <p class="hint">Tạo khóa trong tool, mục Khóa crawl. Mỗi người một khóa riêng.</p>
+        <p id="settingsError" class="field-error" role="alert" hidden></p>
+        <button id="save" class="primary-button" type="submit"><span class="spinner" aria-hidden="true"></span><span>Lưu và kiểm tra</span></button>
+      </form>
+    </main>
+    <script src="dist/popup.js"></script>
+  </body>
+</html>

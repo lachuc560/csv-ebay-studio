@@ -1,0 +1,12 @@
+{
+  "manifest_version": 3,
+  "name": "CSV Studio Crawler",
+  "version": "1.0.0",
+  "description": "Đọc sản phẩm và đủ bảng biến thể trên trang đang mở, gửi vào tool CSV Listing eBay của team.",
+  "action": {
+    "default_title": "Crawl trang này vào CSV Listing eBay",
+    "default_popup": "popup.html"
+  },
+  "permissions": ["storage", "activeTab", "scripting"],
+  "optional_host_permissions": ["https://*/*", "http://localhost/*", "http://127.0.0.1/*"]
+}
