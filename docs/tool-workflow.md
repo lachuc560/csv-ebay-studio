@@ -1,4 +1,4 @@
-# Tool đọc sản phẩm và điền template eBay — cập nhật 20/11/2026
+# Tool lấy dữ liệu và điền template eBay — cập nhật 23/11/2026
 
 Ưu tiên hiện tại là hoàn thiện tool. Web `public/` chỉ dùng thử quy trình; chưa nối hoặc deploy vào backend nhân sự.
 
@@ -6,12 +6,14 @@ Phạm vi: đọc thông tin sản phẩm → tra các trường theo Category I
 
 ## Dùng bản mới
 
+Giao diện **Tool lấy dữ liệu** có thanh điều hướng, bảng sản phẩm kèm ảnh và bộ lọc tìm theo tên/SKU/thương hiệu. Bộ lọc chỉ áp dụng cho bảng; công cụ hàng loạt vẫn xử lý toàn bộ kho. Các thẻ tổng quan dựa trên dữ liệu đã lưu. “Cần kiểm tra” phản ánh dữ liệu cơ bản, danh mục và cảnh báo nguồn; không thay thế kiểm tra đầy đủ trường listing khi xuất CSV. Giá nguồn hiển thị đúng tiền tệ.
+
 1. Chạy `npm test`, rồi `npm run dev` trong thư mục dự án.
 2. Mở `http://localhost:8787`. Tạo khóa crawl trong tab **Khóa crawl** nếu chưa có.
 3. Cài/reload extension **1.3.7** từ thư mục `extension-v2/`. Bản ZIP nằm ở `dist/extension-v1.3.7.zip`. Nếu đã cài, mở `chrome://extensions`, bấm biểu tượng tải lại trên thẻ **CSV Studio Crawler**, rồi tải lại tab sản phẩm. Không cần cài thêm extension mới.
 4. Mở trang sản phẩm, bấm **Crawl AI trang này**. Thiếu key AI vẫn đọc theo luật từ dữ liệu trang; cảnh báo cho biết phần chưa xác minh.
-5. Trong tool, cấu hình eBay Developers **App ID + Cert ID** ở mục **AI gợi ý → eBay Taxonomy**, hoặc đặt `EBAY_APP_ID`, `EBAY_CERT_ID` trong `.env` rồi khởi động lại server. Không đặt key vào extension hoặc mã nguồn.
-6. Vào **Xuất CSV → Điền template theo Category ID**, chọn sản phẩm đã crawl, nhập mã danh mục và bấm **Tra mã & tải CSV**.
+5. Trong tool, cấu hình eBay Developers **App ID + Cert ID** ở mục **AI & kết nối → eBay Taxonomy**, hoặc đặt `EBAY_APP_ID`, `EBAY_CERT_ID` trong `.env` rồi khởi động lại server. Không đặt key vào extension hoặc mã nguồn.
+6. Vào **Xuất CSV eBay → Điền template theo danh mục**, chọn sản phẩm đã crawl, nhập mã danh mục và bấm **Tra mã & tải CSV**.
 7. Tool xác minh đúng mã danh mục cuối (leaf), lấy item specifics, điền dữ liệu đã có và tự tải CSV. Nút **Tải lại CSV vừa tạo** nằm ngay phía trên bảng xem trước. Bảng hiển thị từng SKU và những mục cần sửa. Các trường shop để trống và được hiển thị riêng với lỗi dữ liệu sản phẩm. Nếu đang mở bản cũ, bấm **Ctrl+F5** để tải giao diện mới.
 
 Nếu chưa biết Category ID, luồng **AI phân loại + xuất CSV theo nhóm** sẵn có vẫn tra gợi ý bằng từ khóa. Seller cần đối chiếu danh mục gợi ý có phù hợp sản phẩm. Tra được mã có thật không có nghĩa lựa chọn tự động luôn đúng loại sản phẩm.
@@ -74,7 +76,7 @@ Tham chiếu chính thức: [eBay Taxonomy OpenAPI](https://developer.ebay.com/a
 
 ## Kiểm chứng và giới hạn
 
-Toàn bộ **356/356 kiểm thử đạt**, gồm kiểm thử giá trống và sự kiện tải CSV trên giao diện; extension giữ bản 1.3.7. Các test tự động dùng fixture/mô phỏng eBay, AI và R2; test HTTP local kiểm tra server thật. Kiểm tra API chính thức ngày 19/11/2026 bằng khóa được chủ máy cho phép đã xác nhận:
+Toàn bộ **360/360 kiểm thử đạt**, gồm kiểm thử giá trống, sự kiện tải CSV, tìm kiếm, bộ lọc và trạng thái dữ liệu; extension giữ bản 1.3.7. Đã kiểm tra trình duyệt ở khổ desktop và 390 px: tìm kiếm, mở/đóng chi tiết và cả sáu màn hình. Các test tự động dùng fixture/mô phỏng eBay, AI và R2; test HTTP local kiểm tra server thật. Kiểm tra API chính thức ngày 19/11/2026 bằng khóa được chủ máy cho phép đã xác nhận:
 
 - Gemini tạo JSON thành công với `gemini-flash-lite-latest`; dữ liệu mẫu không có kích thước được giữ `null`.
 - eBay xác thực thành công, trả cây danh mục Mỹ `0`, xác minh Category ID `20563` là **Pillows** và lấy item specifics. Kết quả lúc kiểm tra có hai trường bắt buộc **Type**, **Brand** và 31 trường khuyến nghị; luôn dùng dữ liệu API khi tra lại.

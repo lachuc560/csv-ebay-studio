@@ -30,7 +30,7 @@ test('dev server sống sót sau GET // và vẫn phục vụ / và /api/ingest/
     assert.equal(badApi.status, 401, 'GET //api/ingest/ping vẫn vào đúng route và trả 401 khi không có khóa');
     const home = await fetch(`${base}/`);
     assert.equal(home.status, 200);
-    assert.match(await home.text(), /CSV Listing eBay|csv-ebay/i);
+    assert.match(await home.text(), /Tool lấy dữ liệu/i);
   } finally {
     await new Promise((resolve) => server.close(resolve));
   }

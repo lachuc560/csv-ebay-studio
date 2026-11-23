@@ -12,7 +12,7 @@
 // (bootstrap trả { products, config, crawlErrors, keys }; keys dùng
 // createdAt/lastUsedAt camelCase; ai/suggest nhận { productId }).
 
-import { buildCsv, optionNamesFor, applyEdits, calcSellPrice, groupProductsByTheme, groupProductsByAiAssignments, buildGroupedEbayCsvs, buildDraftGroupedCsvs, parseEbayTemplate, buildEbayTemplateCsv, buildResearchGroupedCsvs, parseEbayItemId, parseEbayWatchers, autoApplyEbayResolutions, crawledSummaryItems } from './core.js';
+import { buildCsv, optionNamesFor, applyEdits, groupProductsByTheme, groupProductsByAiAssignments, buildGroupedEbayCsvs, buildDraftGroupedCsvs, parseEbayTemplate, buildEbayTemplateCsv, buildResearchGroupedCsvs, parseEbayItemId, parseEbayWatchers, autoApplyEbayResolutions, crawledSummaryItems } from './core.js';
 import { parseCsvText, templateColumnIndex } from './core.js';
 import { sellerExportConfig } from './export-settings.js';
 
@@ -57,12 +57,22 @@ async function api(path, init = {}) {
 const asArray = (v) => (Array.isArray(v) ? v : []);
 
 // ---- Tabs ---------------------------------------------------------------
-document.querySelectorAll('nav button[data-tab]').forEach((btn) => {
-  btn.addEventListener('click', () => {
-    document.querySelectorAll('nav button[data-tab]').forEach((b) => b.setAttribute('aria-selected', String(b === btn)));
-    document.querySelectorAll('main > section').forEach((s) => { s.hidden = s.id !== `tab-${btn.dataset.tab}`; });
-    if (btn.dataset.tab === 'keys') loadKeys();
+function activateTab(tabName) {
+  if (!$(`tab-${tabName}`)) return;
+  document.querySelectorAll('nav button[data-tab]').forEach((button) => {
+    button.setAttribute('aria-selected', String(button.dataset.tab === tabName));
   });
+  document.querySelectorAll('main > section').forEach((section) => { section.hidden = section.id !== `tab-${tabName}`; });
+  const labels = { browse: 'Kho sản phẩm', ai: 'AI & kết nối', config: 'Cấu hình giá', export: 'Xuất CSV eBay', keys: 'Khóa crawl', import: 'Nhập dữ liệu' };
+  if ($('activePageLabel')) $('activePageLabel').textContent = labels[tabName] ?? 'Tool lấy dữ liệu';
+  window.scrollTo(0, 0);
+  if (tabName === 'keys') loadKeys();
+}
+document.querySelectorAll('nav button[data-tab]').forEach((button) => {
+  button.addEventListener('click', () => activateTab(button.dataset.tab));
+});
+document.querySelectorAll('[data-go-tab]').forEach((button) => {
+  button.addEventListener('click', () => activateTab(button.dataset.goTab));
 });
 
 // ---- Bootstrap: GET /api/bootstrap --------------------------------------
@@ -82,7 +92,6 @@ async function loadBootstrap() {
     fillConfigForm();
     renderBrowse();
     renderGroupList();
-    $('exportCount').textContent = `${products.length} sản phẩm, ${products.reduce((n, p) => n + (p.variants ?? []).filter((v) => v.in_stock).length, 0)} biến thể còn hàng.`;
     setStatus(`Đã tải ${products.length} sản phẩm.`, 'ok');
   } catch (e) {
     setStatus(`Không tải được /api/bootstrap: ${e.message}`, 'error');
@@ -106,25 +115,110 @@ function variantOptionSummary(p) {
     return values.length ? `${n}: ${values.join(', ')}` : null;
   }).filter(Boolean).join(' · ');
 }
+// Browse data helpers: filters and dashboard counts only inspect saved records.
+function productStockSummary(product) {
+  const variants = product.variants?.length ? product.variants : [product];
+  const unavailable = (variant) => variant.in_stock === false || variant.available === false
+    || (variant.stock_qty != null && Number.isFinite(Number(variant.stock_qty)) && Number(variant.stock_qty) <= 0);
+  const available = variants.filter((variant) => !unavailable(variant)
+    && variant.in_stock !== null && variant.available !== null
+    && (variant.in_stock === true || variant.available === true)).length;
+  const unknown = variants.filter((variant) => !unavailable(variant)
+    && !(variant.in_stock !== null && variant.available !== null && (variant.in_stock === true || variant.available === true))).length;
+  return { available, unknown, total: variants.length };
+}
+function productCategoryInfo(product) {
+  const edits = product.edits ?? {};
+  const id = String(edits.ebayCategoryId ?? edits.category ?? product.category ?? '').trim();
+  const verified = /^\d+$/.test(String(edits.ebayCategoryId ?? ''))
+    && (Array.isArray(edits.ebayRequiredAspects) || Array.isArray(edits.ebayRecommendedAspects));
+  return { id, verified, name: String(edits.ebayCategoryName ?? '').trim() };
+}
+function productReviewReasons(product) {
+  const reasons = [];
+  if (!String(product.edits?.title ?? product.title ?? '').trim()) reasons.push('Thiếu tiêu đề');
+  if (!String(product.edits?.description ?? product.description ?? '').trim()) reasons.push('Thiếu mô tả');
+  if (!(product.images ?? []).length) reasons.push('Thiếu ảnh');
+  if (product.price == null || !Number.isFinite(Number(product.price)) || Number(product.price) <= 0) reasons.push('Thiếu giá nguồn');
+  if (!productCategoryInfo(product).verified) reasons.push('Chưa tra danh mục');
+  if (productStockSummary(product).unknown) reasons.push('Chưa rõ tồn kho');
+  if (product.price_estimated) reasons.push('Giá ước tính');
+  if (product.truncated) reasons.push('Chưa đủ biến thể');
+  if ((product.crawl_errors ?? []).length) reasons.push('Có cảnh báo đọc dữ liệu');
+  return reasons;
+}
+function searchText(value) {
+  return String(value ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[đĐ]/g, 'd').toLowerCase();
+}
+function filterBrowseProducts(products, query = '', filter = 'all') {
+  const terms = searchText(query).trim().split(/\s+/).filter(Boolean);
+  return products.filter((product) => {
+    if (filter === 'in_stock' && !productStockSummary(product).available) return false;
+    if (filter === 'needs_review' && !productReviewReasons(product).length) return false;
+    const category = productCategoryInfo(product);
+    const haystack = searchText([product.title, product.edits?.title, product.brand, product.source_site, product.source_url,
+      product.id, category.id, category.name, ...(product.variants ?? []).map((variant) => variant.sku)].join(' '));
+    return terms.every((term) => haystack.includes(term));
+  });
+}
+function sourceMoney(value, currency) {
+  if (value == null || value === '' || !Number.isFinite(Number(value))) return '—';
+  return `${new Intl.NumberFormat('vi-VN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Number(value))}${currency ? ` ${String(currency).toUpperCase()}` : ''}`;
+}
+function safeProductImage(value) {
+  try { const url = new URL(value); return /^https?:$/.test(url.protocol) ? url.href : ''; }
+  catch { return ''; }
+}
+
+// Browse controls filter the table only; bulk actions keep their whole-library scope.
+$('productSearch')?.addEventListener('input', renderBrowse);
+$('productStockFilter')?.addEventListener('change', renderBrowse);
+$('clearProductFilters')?.addEventListener('click', () => {
+  if ($('productSearch')) $('productSearch').value = '';
+  if ($('productStockFilter')) $('productStockFilter').value = 'all';
+  renderBrowse();
+  $('productSearch')?.focus();
+});
 function renderBrowse() {
-  const names = allOptionNames();
-  const rows = state.products.map((p) => {
-    const inStock = (p.variants ?? []).filter((v) => v.in_stock).length;
-    const sell = calcSellPrice(p.price, state.config);
-    return `<tr data-id="${esc(p.id)}">
-      <td>${esc(p.title)}${p.price_estimated ? ' <span title="Giá ước tính">~</span>' : ''}${p.truncated ? ' <span title="Crawl bị cắt, chưa đủ biến thể">[cắt]</span>' : ''}</td>
-      <td>${esc(p.source_site)}</td>
-      <td>${money(p.price)}${sell != null ? `<br><span class="muted">bán ${money(sell)}</span>` : ''}</td>
-      <td>${inStock}/${p.variant_count ?? (p.variants ?? []).length}</td>
-      <td>${p.ebaySold != null ? esc(p.ebaySold) : '—'}</td>
-      <td>${p.ebayWatchers != null ? esc(p.ebayWatchers) : '—'}</td>
-      <td>${p.ebayItemUrl ? `<a href="${esc(p.ebayItemUrl)}" target="_blank" rel="noopener">${esc(p.ebayItemTitle ?? p.ebayItemId ?? '')}</a>${p.ebayMatchScore != null ? ` (${Number(p.ebayMatchScore).toFixed(2)})` : ''}` : '—'}</td>
-      ${names.map((n) => `<td>${esc([...new Set((p.variants ?? []).map((v) => v.options?.[n]).filter(Boolean))].join(', '))}</td>`).join('')}
+  const products = filterBrowseProducts(state.products, $('productSearch')?.value, $('productStockFilter')?.value);
+  const rows = products.map((product) => {
+    const stock = productStockSummary(product);
+    const category = productCategoryInfo(product);
+    const reasons = productReviewReasons(product);
+    const title = product.edits?.title ?? product.title ?? 'Chưa có tiêu đề';
+    const thumb = safeProductImage(product.images?.[0]);
+    const options = variantOptionSummary(product);
+    return `<tr data-id="${esc(product.id)}">
+      <td><div class="product-cell"><div class="product-thumb">${thumb ? `<img src="${esc(thumb)}" alt="" loading="lazy" referrerpolicy="no-referrer">` : '<span aria-hidden="true">◇</span>'}</div><div><button type="button" class="product-title" data-view-product="${esc(product.id)}">${esc(title)}</button><span class="product-meta">${esc([product.brand, product.source_site].filter(Boolean).join(' · ') || 'Chưa có nguồn')}</span></div></div></td>
+      <td class="table-price">${esc(sourceMoney(product.price, product.currency))}${product.price_estimated ? '<span class="product-meta">Giá ước tính</span>' : ''}</td>
+      <td><span class="status-chip ${stock.available ? 'status-success' : stock.unknown ? 'status-warning' : 'status-neutral'}">${stock.available ? `${stock.available}/${stock.total} còn hàng` : stock.unknown ? 'Chưa rõ tồn kho' : 'Hết hàng'}</span>${options ? `<span class="variants-summary" title="${esc(options)}">${esc(options)}</span>` : `<span class="product-meta">${stock.total} biến thể</span>`}</td>
+      <td>${category.id ? `<span class="category-code">${esc(category.id)}</span><span class="product-meta">${esc(category.name || (category.verified ? 'Đã tra danh mục' : 'Cần xác minh mã'))}</span>` : '<span class="product-meta">Chưa tra danh mục</span>'}</td>
+      <td>${reasons.length ? `<span class="status-chip status-warning">Cần kiểm tra</span><span class="review-note" title="${esc(reasons.join(' · '))}">${esc(reasons.slice(0, 2).join(' · '))}${reasons.length > 2 ? ` · +${reasons.length - 2}` : ''}</span>` : '<span class="status-chip status-success">Có dữ liệu cơ bản</span><span class="product-meta">Kiểm tra trường khi xuất CSV</span>'}</td>
+      <td><button type="button" class="table-action" data-view-product="${esc(product.id)}" aria-label="Xem chi tiết ${esc(title)}">Chi tiết</button></td>
     </tr>`;
   }).join('');
-  $('browseTable').innerHTML = `<thead><tr><th>Tiêu đề</th><th>Site</th><th>Giá nguồn / Giá bán</th><th>Còn hàng / Tổng biến thể</th><th>Đã bán (eBay)</th><th>Người theo dõi</th><th>Listing eBay khớp</th>${names.map((n) => `<th>${esc(n)}</th>`).join('')}</tr></thead><tbody>${rows || '<tr><td colspan="99">Chưa có sản phẩm nào.</td></tr>'}</tbody>`;
-  $('count').textContent = `${state.products.length} sản phẩm`;
-  $('browseTable').querySelectorAll('tr[data-id]').forEach((tr) => tr.addEventListener('click', () => showDetail(tr.dataset.id)));
+  $('browseTable').innerHTML = `<thead><tr><th scope="col">Sản phẩm</th><th scope="col">Giá nguồn</th><th scope="col">Biến thể</th><th scope="col">Danh mục eBay</th><th scope="col">Dữ liệu</th><th scope="col"><span class="sr-only">Thao tác</span></th></tr></thead><tbody>${rows}</tbody>`;
+  $('browseTable').hidden = !products.length;
+  $('count').textContent = products.length === state.products.length ? `${products.length} sản phẩm` : `${products.length} / ${state.products.length} sản phẩm`;
+  $('exportCount').textContent = `${state.products.length} sản phẩm, ${state.products.reduce((n, p) => n + productStockSummary(p).available, 0)} biến thể còn hàng.`;
+  if ($('browseEmpty')) $('browseEmpty').hidden = !!products.length;
+  if ($('browseEmptyTitle')) $('browseEmptyTitle').textContent = state.products.length ? 'Không tìm thấy sản phẩm' : 'Kho sản phẩm đang trống';
+  if ($('browseEmptyDescription')) $('browseEmptyDescription').textContent = state.products.length ? 'Thử từ khóa khác hoặc xóa bộ lọc để xem toàn bộ sản phẩm.' : 'Đọc một trang sản phẩm bằng extension hoặc nhập dữ liệu để bắt đầu.';
+  if ($('clearProductFilters')) $('clearProductFilters').hidden = !state.products.length;
+  const counts = {
+    dashboardTotal: state.products.length,
+    dashboardAvailable: state.products.filter((product) => productStockSummary(product).available > 0).length,
+    dashboardCategorized: state.products.filter((product) => productCategoryInfo(product).verified).length,
+    dashboardReview: state.products.filter((product) => productReviewReasons(product).length > 0).length,
+  };
+  for (const [id, value] of Object.entries(counts)) if ($(id)) $(id).textContent = String(value);
+  if ($('dashboardReview')) $('dashboardReview').title = 'Thiếu tiêu đề, mô tả, ảnh, giá nguồn, danh mục đã tra; tồn kho chưa rõ hoặc có cảnh báo đọc dữ liệu. Đây không phải kết quả xác nhận đủ điều kiện listing.';
+  $('browseTable').querySelectorAll('tr[data-id]').forEach((row) => row.addEventListener('click', (event) => {
+    if (event.target.closest('a, button')) return;
+    showDetail(row.dataset.id);
+  }));
+  $('browseTable').querySelectorAll('[data-view-product]').forEach((button) => button.addEventListener('click', () => showDetail(button.dataset.viewProduct)));
+  $('browseTable').querySelectorAll('img').forEach((image) => image.addEventListener('error', () => { image.hidden = true; }, { once: true }));
 }
 
 function showDetail(id) {
@@ -135,8 +229,8 @@ function showDetail(id) {
   const variantRows = (p.variants ?? []).map((v, i) => `<tr>
     <td>${i + 1}</td>
     ${names.map((n) => `<td>${esc(v.options?.[n] ?? '')}</td>`).join('')}
-    <td>${money(v.price)}</td><td>${money(v.compare_at_price)}</td>
-    <td>${v.in_stock ? 'Còn' : 'Hết'}</td>
+    <td>${esc(sourceMoney(v.price, v.currency ?? p.currency))}</td><td>${esc(sourceMoney(v.compare_at_price, v.currency ?? p.currency))}</td>
+    <td>${productStockSummary({ variants: [v] }).available ? 'Còn hàng' : productStockSummary({ variants: [v] }).unknown ? 'Chưa rõ' : 'Hết hàng'}</td>
     <td>${esc(v.sku ?? '')}</td><td>${esc(v.upc ?? '')}</td>
     <td>${esc(v.image ?? '')}</td>
   </tr>`).join('');
@@ -146,11 +240,11 @@ function showDetail(id) {
   // không bịa.
   const summaryHtml = `<h4>Đã cào được</h4><ul>${crawledSummaryItems(p, state.config).map((it) => `<li><strong>${esc(it.label)}:</strong> ${it.url ? `<a href="${esc(it.url)}" target="_blank" rel="noopener">${esc(it.value)}</a>` : esc(it.value)}</li>`).join('')}</ul>`;
   $('detail').innerHTML = `
-    <h3>${esc(p.title)}</h3>
+    <div class="detail-heading"><div><span class="eyebrow">Chi tiết sản phẩm</span><h3>${esc(eff.title)}</h3></div><button type="button" id="closeDetailBtn" class="button-secondary" aria-label="Đóng chi tiết sản phẩm">Đóng</button></div>
     ${summaryHtml}
     <p class="muted">${esc(p.source_site)} · <a href="${esc(p.source_url ?? '')}" target="_blank" rel="noopener">${esc(p.source_url ?? '')}</a></p>
-    <p><strong>Giá nguồn:</strong> ${money(p.price)} ${esc(p.currency ?? '')} ·
-    <strong>Giá bán gợi ý:</strong> ${money(eff.sell_price)} ·
+    <p><strong>Giá nguồn:</strong> ${esc(sourceMoney(p.price, p.currency))} ·
+    <strong>Giá bán gợi ý:</strong> ${esc(sourceMoney(eff.sell_price, state.config.listingCurrency ?? 'USD'))} ·
     <strong>Giá ước tính:</strong> ${p.price_estimated ? 'Có — kiểm lại trước khi xuất' : 'Không'} ·
     <strong>Crawl bị cắt:</strong> ${p.truncated ? 'Có — chưa đủ biến thể' : 'Không'}</p>
     <p><strong>Thương hiệu:</strong> ${esc(p.brand ?? '—')} · <strong>Danh mục:</strong> ${esc(p.category ?? p.suggested_category ?? '—')}
@@ -159,10 +253,10 @@ function showDetail(id) {
     <p><strong>Tuỳ chọn:</strong> ${esc(names.join(', ') || '—')} (${esc(variantOptionSummary(p) || '—')})</p>
     <p><strong>Thuộc tính:</strong> ${esc(Object.entries(p.attributes ?? {}).filter(([, v]) => v).map(([k, v]) => `${k}=${v}`).join('; ') || '—')}</p>
     <p><strong>Mô tả:</strong> ${esc(p.description ?? '—')}</p>
-    <p class="muted">Ảnh: ${(p.images ?? []).length} · Biến thể: ${p.variant_count ?? (p.variants ?? []).length} (còn hàng ${p.in_stock_count ?? (p.variants ?? []).filter((v) => v.in_stock).length}) · Version: ${p.version ?? 1} · Crawl: ${esc(p.crawled_at ?? '')}</p>
+    <p class="muted">Ảnh: ${(p.images ?? []).length} · Biến thể: ${productStockSummary(p).total} (còn hàng ${productStockSummary(p).available}) · Version: ${p.version ?? 1} · Crawl: ${esc(p.crawled_at ?? '')}</p>
     <table><thead><tr><th>#</th>${names.map((n) => `<th>${esc(n)}</th>`).join('')}<th>Giá</th><th>Giá gốc</th><th>Tồn</th><th>SKU</th><th>UPC</th><th>Ảnh variant</th></tr></thead><tbody>${variantRows || '<tr><td colspan="99">Không có biến thể.</td></tr>'}</tbody></table>
     <form id="editForm">
-      <h4>Sửa (team)</h4>
+      <h4>Chỉnh sửa thông tin</h4>
       <label for="editTitle">Tiêu đề</label>
       <input id="editTitle" name="title" type="text" value="${esc(p.edits?.title ?? p.title)}" />
       <label for="editCategory">Danh mục eBay</label>
@@ -187,6 +281,7 @@ function showDetail(id) {
     </form>
     <p id="ebayMsg" role="status"></p>`;
   $('detail').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  $('closeDetailBtn').addEventListener('click', () => { $('detail').hidden = true; });
   $('editForm').addEventListener('submit', async (e) => {
     e.preventDefault();
     const fd = new FormData(e.target);
@@ -707,7 +802,7 @@ $('ebayEnrichAllBtn').addEventListener('click', async () => {
     state.products = asArray(fresh.products ?? fresh);
     renderBrowse();
     renderGroupList();
-    status.textContent = `Đã tra xong ${total} sản phẩm: ${matched} sản phẩm khớp listing eBay, ${total - matched} sản phẩm chưa khớp (xem cột "Listing eBay khớp", bấm vào từng dòng rồi bấm "Tìm lại" để thử lại).` +
+    status.textContent = `Đã tra xong ${total} sản phẩm: ${matched} sản phẩm khớp listing eBay, ${total - matched} sản phẩm chưa khớp. Mở Chi tiết để xem số liệu và bấm "Tìm lại" nếu cần.` +
       (result.stopped429 ? ' Đã chạm giới hạn request (429) giữa chừng — đợi 1 phút rồi bấm lại, sản phẩm đã khớp xong sẽ được bỏ qua.' : '');
     status.className = 'ok';
   } catch (err) {
@@ -1052,7 +1147,7 @@ async function resolveEbayGroups(groups, { refreshSummary = true } = {}) {
 }
 
 // ---- Gợi ý AI hàng loạt (tab Duyệt) ---------------------------------------
-// Gọi lần lượt từng sản phẩm đang hiển thị; mỗi dòng có nút Áp dụng / Bỏ qua
+// Gọi lần lượt từng sản phẩm trong kho; mỗi dòng có nút Áp dụng / Bỏ qua
 // riêng — KHÔNG tự áp dụng.
 $('aiBulkBtn').addEventListener('click', async () => {
   const status = $('aiBulkStatus');
@@ -1067,7 +1162,7 @@ $('aiBulkBtn').addEventListener('click', async () => {
   // tính là đã gợi ý — muốn gợi ý lại thì Bỏ qua dòng đó rồi bấm lại).
   const todo = state.products.filter((p) => !state.aiSuggestions.has(p.id));
   if (!todo.length) {
-    status.textContent = 'Tất cả sản phẩm đang hiển thị đã có gợi ý — bấm Áp dụng từng dòng bên dưới. Muốn gợi ý lại một sản phẩm thì bấm Bỏ qua dòng đó rồi bấm nút này lại.';
+    status.textContent = 'Tất cả sản phẩm trong kho đã có gợi ý — bấm Áp dụng từng dòng bên dưới. Muốn gợi ý lại một sản phẩm thì bấm Bỏ qua dòng đó rồi bấm nút này lại.';
     status.className = '';
     return;
   }

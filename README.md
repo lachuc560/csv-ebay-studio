@@ -1,4 +1,6 @@
-# CSV Listing eBay
+# Tool lấy dữ liệu
+
+> **Giao diện mới 23/11/2026:** kho sản phẩm có ảnh, tìm kiếm theo tên/SKU, bộ lọc trạng thái và bố cục thích ứng điện thoại. Mở lại web bằng **Ctrl+F5** sau khi cập nhật source.
 
 > **Bản cập nhật 18/11/2026 — tập trung tool trước, backend nhân sự để sau.**
 > Extension **1.3.7** sửa đọc nhãn thông số Soho Home; tool tra các trường theo **Category ID**, điền dữ liệu nguồn và xuất CSV để đối chiếu. Xem [quy trình và kết quả kiểm tra](docs/tool-workflow.md).
