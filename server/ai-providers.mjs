@@ -37,12 +37,37 @@ export const OPENAI_MIN_INTERVAL_MS = 0;
 
 // ---- text thuần từ mô tả HTML ----------------------------------------------
 
+/** Bỏ khối <tag>...</tag> bằng indexOf (thời gian tuyến tính). Regex lười
+ *  /<script[\s\S]*?<\/script>/ quét tới cuối chuỗi cho MỖI lần mở thẻ không
+ *  đóng -> O(n²), chuỗi nhiều "<script" có thể chặn event loop rất lâu.
+ *  Thẻ mở không có thẻ đóng thì giữ nguyên phần còn lại (như regex cũ). */
+function stripHtmlBlocks(s, tag) {
+  const lower = s.toLowerCase();
+  const open = `<${tag}`;
+  const close = `</${tag}`;
+  let out = '';
+  let i = 0;
+  while (i < s.length) {
+    const start = lower.indexOf(open, i);
+    if (start === -1) { out += s.slice(i); break; }
+    const end = lower.indexOf(close, start + open.length);
+    if (end === -1) { out += s.slice(i); break; }
+    out += `${s.slice(i, start)} `;
+    const gt = lower.indexOf('>', end);
+    i = gt === -1 ? s.length : gt + 1;
+  }
+  return out;
+}
+
 /** Bỏ HTML khỏi mô tả, giữ text thuần, tối đa ~2000 ký tự để gửi LLM. */
 export function stripHtmlToText(html, maxChars = AI_MAX_DESCRIPTION_CHARS) {
-  const text = String(html ?? '')
-    .replace(/<script[\s\S]*?<\/script>/gi, ' ')
-    .replace(/<style[\s\S]*?<\/style>/gi, ' ')
-    .replace(/<[^>]+>/g, ' ')
+  // Cắt bớt TRƯỚC khi chạy regex: mô tả lưu trong kho có thể tới vài MB,
+  // chỉ cần đủ HTML để còn ~maxChars ký tự text sau khi bỏ thẻ.
+  const limit = Math.max(1, Number(maxChars) || AI_MAX_DESCRIPTION_CHARS) * 20;
+  const raw = String(html ?? '').slice(0, limit);
+  const text = stripHtmlBlocks(stripHtmlBlocks(raw, 'script'), 'style')
+    // [^<>]* (không chỉ [^>]+) để chuỗi nhiều '<' không bị quét lại O(n²).
+    .replace(/<[^<>]*>/g, ' ')
     .replace(/&nbsp;/gi, ' ')
     .replace(/&amp;/g, '&')
     .replace(/&quot;/g, '"')
@@ -413,9 +438,13 @@ export class AiRuntime {
   async waitForRateLimit() {
     const interval = this.getMinIntervalMs();
     if (!interval) return;
-    const elapsed = Date.now() - (this.lastCallAt ?? 0);
-    if (elapsed < interval) await sleep(interval - elapsed);
-    this.lastCallAt = Date.now();
+    // Giữ chỗ (reserve) lượt gọi TRƯỚC khi await: 2 request đồng thời
+    // (2 tab / extension + web) không cùng đọc lastCallAt cũ rồi gọi LLM
+    // cùng lúc — lượt sau xếp hàng sau lượt trước đúng 1 khoảng giãn cách.
+    const now = Date.now();
+    const at = Math.max(now, (this.lastCallAt ?? 0) + interval);
+    this.lastCallAt = at;
+    if (at > now) await sleep(at - now);
   }
 
   /** Cấu hình hiệu lực: key lấy env trước rồi mới tới key dán trong web;
@@ -423,10 +452,14 @@ export class AiRuntime {
   getEffectiveConfig() {
     const provider = this.memory.provider ?? this.env.provider ?? 'openai';
     const safeProvider = AI_PROVIDERS.includes(provider) ? provider : 'openai';
+    // Bảo mật: khi key lấy từ env (AI_API_KEY), KHÔNG dùng baseUrl dán trong
+    // web — nếu không, ai gọi được POST /api/ai/config {baseUrl} sẽ khiến
+    // server gửi key env tới URL của họ. baseUrl web chỉ áp cho key web.
+    const memoryBaseUrl = this.env.apiKey ? null : this.memory.baseUrl;
     return {
       provider: safeProvider,
       model: this.memory.model ?? this.env.model ?? DEFAULT_AI_MODELS[safeProvider],
-      baseUrl: this.memory.baseUrl ?? this.env.baseUrl ?? DEFAULT_AI_BASE_URLS[safeProvider],
+      baseUrl: memoryBaseUrl ?? this.env.baseUrl ?? DEFAULT_AI_BASE_URLS[safeProvider],
       apiKey: this.env.apiKey ?? this.memory.apiKey ?? null,
       source: this.env.apiKey ? 'env' : (this.memory.apiKey ? 'web' : 'none'),
     };
@@ -457,7 +490,13 @@ export class AiRuntime {
       this.memory.provider = p;
     }
     if (model !== undefined && model !== null && String(model).trim() !== '') this.memory.model = String(model).trim();
-    if (baseUrl !== undefined && baseUrl !== null && String(baseUrl).trim() !== '') this.memory.baseUrl = String(baseUrl).trim();
+    if (baseUrl !== undefined && baseUrl !== null && String(baseUrl).trim() !== '') {
+      const value = String(baseUrl).trim();
+      let parsed = null;
+      try { parsed = new URL(value); } catch { /* xử lý bên dưới */ }
+      if (!parsed || !/^https?:$/.test(parsed.protocol)) throw { code: 'invalid_base_url' };
+      this.memory.baseUrl = value;
+    }
     if (apiKey !== undefined) {
       this.memory.apiKey = (typeof apiKey === 'string' && apiKey.trim()) ? apiKey.trim() : null;
     }

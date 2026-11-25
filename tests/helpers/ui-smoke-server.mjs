@@ -31,7 +31,7 @@ const server = http.createServer(async (req, res) => {
       if (relative.includes('..')) { res.writeHead(403); res.end(); return; }
       const file = new URL(`../../public/${relative}`, import.meta.url);
       const content = await readFile(file);
-      res.writeHead(200, { 'Content-Type': relative.endsWith('.js') ? 'text/javascript' : relative.endsWith('.html') ? 'text/html' : 'text/plain' });
+      res.writeHead(200, { 'Content-Type': relative.endsWith('.js') ? 'text/javascript' : relative.endsWith('.html') ? 'text/html' : relative.endsWith('.css') ? 'text/css' : 'text/plain' });
       res.end(content);
     }
   } catch { res.writeHead(500); res.end('QA fixture error'); }

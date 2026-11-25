@@ -11,7 +11,8 @@ test('occupied port reports a useful message and leaves the existing service run
   const existing = createServer((_req, res) => res.end('existing service'));
   await new Promise((resolve, reject) => {
     existing.once('error', reject);
-    existing.listen(0, resolve);
+    // Dev server mặc định nghe 127.0.0.1 — phiên đang chạy cũng ở đó.
+    existing.listen(0, '127.0.0.1', resolve);
   });
   const port = existing.address().port;
   let child;

@@ -4,100 +4,159 @@
 <body>
 <a class="skip-link" href="#main">Đến nội dung chính</a>
 <aside class="sidebar">
-  <a class="brand" href="./"><span class="brand-mark"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 21 8v8l-9 5-9-5V8l9-5ZM3 8l9 5 9-5M12 13v8M7.5 5.5l9 5"/></svg></span><span>Tool lấy dữ liệu<small>SELLER WORKSPACE</small></span></a>
-  <div class="nav-label">KHÔNG GIAN LÀM VIỆC</div>
-  <nav aria-label="Điều hướng chính"><button type="button" data-tab="browse" aria-selected="true"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z"/></svg>Kho sản phẩm</button><button type="button" data-tab="export" aria-selected="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12m-5-5 5 5 5-5M4 15v5h16v-5"/></svg>Xuất CSV eBay</button><button type="button" data-tab="import" aria-selected="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V4m-5 5 5-5 5 5M4 16v5h16v-5"/></svg>Nhập dữ liệu</button><div class="nav-label">THIẾT LẬP</div><button type="button" data-tab="ai" aria-selected="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 2.6 6.4L21 12l-6.4 2.6L12 21l-2.6-6.4L3 12l6.4-2.6L12 3Z"/></svg>AI &amp; kết nối</button><button type="button" data-tab="config" aria-selected="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3v8m0 4v6M12 3v3m0 4v11M19 3v11m0 4v3M2 11h6M9 6h6M16 14h6"/></svg>Cấu hình giá</button><button type="button" data-tab="keys" aria-selected="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 12 21 21m-4-4 3-3m-1 5 3-3M13 8a5 5 0 1 1-10 0 5 5 0 0 1 10 0"/></svg>Khóa crawl</button></nav>
-  <div class="sidebar-guide"><span class="guide-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m10 13 4-4m-6 6-1 1a4 4 0 0 1-6-6l4-4a4 4 0 0 1 6 0m2 3 1-1a4 4 0 0 1 6 6l-4 4a4 4 0 0 1-6 0"/></svg></span><strong>Bắt đầu từ trang nguồn</strong><p>Mở sản phẩm và dùng extension để đưa dữ liệu vào kho.</p><button type="button" data-go-tab="keys">Thiết lập khóa crawl</button></div>
-  <div class="sidebar-footer"><span class="workspace-avatar">TL</span><div>Không gian của bạn<small>Quản lý dữ liệu sản phẩm</small></div></div>
+  <a class="brand" href="./"><span class="brand-mark"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 21 8v8l-9 5-9-5V8l9-5ZM3 8l9 5 9-5M12 13v8M7.5 5.5l9 5"/></svg></span><span>Tool lấy dữ liệu</span></a>
+  <nav aria-label="Điều hướng chính">
+    <button type="button" data-tab="browse" aria-current="page"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z"/></svg>Kho sản phẩm</button>
+    <button type="button" data-tab="export"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12m-5-5 5 5 5-5M4 15v5h16v-5"/></svg>Xuất CSV eBay</button>
+    <button type="button" data-tab="import"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V4m-5 5 5-5 5 5M4 16v5h16v-5"/></svg>Nhập dữ liệu</button>
+    <button type="button" data-tab="settings"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3v8m0 4v6M12 3v3m0 4v11M19 3v11m0 4v3M2 11h6M9 6h6M16 14h6"/></svg>Cài đặt</button>
+  </nav>
+  <p id="status" class="sidebar-status" role="status">Đang tải dữ liệu…</p>
 </aside>
 <div class="workspace">
-<header class="topbar"><div class="breadcrumb">Không gian làm việc <span>/</span><strong id="activePageLabel">Kho sản phẩm</strong></div><div class="topbar-status"><p id="status" role="status">Đang tải dữ liệu…</p><span class="workspace-avatar">TL</span></div></header>
 <main id="main" tabindex="-1">
-<section id="tab-browse" aria-label="Kho sản phẩm">
-<div class="page-heading"><div><p class="eyebrow">DỮ LIỆU GỌN GÀNG. THAO TÁC DỄ DÀNG.</p><h1>Tool lấy dữ liệu</h1><p class="page-description">Từ trang sản phẩm đến file CSV eBay, trong một không gian.</p></div><button type="button" class="button-primary" data-go-tab="import"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V4m-5 5 5-5 5 5M4 16v5h16v-5"/></svg>Nhập dữ liệu</button></div>
-<div class="stats-grid"><article class="stat-card"><div><span>Tổng sản phẩm</span><strong id="dashboardTotal">—</strong><small>Đã lưu trong kho</small></div><span class="stat-icon blue"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 21 8v8l-9 5-9-5V8l9-5ZM3 8l9 5 9-5M12 13v8M7.5 5.5l9 5"/></svg></span></article><article class="stat-card"><div><span>Có biến thể còn hàng</span><strong id="dashboardAvailable">—</strong><small>Theo dữ liệu nguồn đã lưu</small></div><span class="stat-icon green"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m7 12 3 3 7-7M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0"/></svg></span></article><article class="stat-card"><div><span>Đã xác minh danh mục</span><strong id="dashboardCategorized">—</strong><small>Đối chiếu với eBay</small></div><span class="stat-icon violet"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3h8l10 10-8 8L3 11V3ZM7 7h.01"/></svg></span></article><article class="stat-card"><div><span>Cần kiểm tra</span><strong id="dashboardReview">—</strong><small>Dữ liệu cơ bản hoặc danh mục</small></div><span class="stat-icon amber"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10.3 4.5 2.5 18a1.5 1.5 0 0 0 1.3 2h16.4a1.5 1.5 0 0 0 1.3-2L13.7 4.5a2 2 0 0 0-3.4 0ZM12 9v4m0 3v.5"/></svg></span></article></div>
-<div class="workflow-strip"><div><span class="workflow-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m10 13 4-4m-6 6-1 1a4 4 0 0 1-6-6l4-4a4 4 0 0 1 6 0m2 3 1-1a4 4 0 0 1 6 6l-4 4a4 4 0 0 1-6 0"/></svg></span><p><strong>Đọc từ nguồn</strong><small>Extension giữ dữ liệu sản phẩm</small></p></div><div><span class="workflow-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3h8l10 10-8 8L3 11V3ZM7 7h.01"/></svg></span><p><strong>Đối chiếu danh mục</strong><small>Tra các trường eBay yêu cầu</small></p></div><div><span class="workflow-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12m-5-5 5 5 5-5M4 15v5h16v-5"/></svg></span><p><strong>Chuẩn bị CSV</strong><small>Kiểm tra trước khi đăng bán</small></p></div></div>
-<div class="panel product-panel"><div class="panel-heading"><div><h2>Kho sản phẩm</h2><p id="count" class="muted"></p></div><button type="button" class="button-primary" data-go-tab="export"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12m-5-5 5 5 5-5M4 15v5h16v-5"/></svg>Xuất CSV</button></div>
-<div class="table-toolbar"><div class="search-field"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17 10a7 7 0 1 1-14 0 7 7 0 0 1 14 0m-2 5 6 6"/></svg><label class="sr-only" for="productSearch">Tìm sản phẩm</label><input id="productSearch" type="search" placeholder="Tìm tên sản phẩm, SKU, thương hiệu…" autocomplete="off"/></div><label class="sr-only" for="productStockFilter">Lọc sản phẩm</label><select id="productStockFilter"><option value="all">Tất cả trạng thái</option><option value="in_stock">Có biến thể còn hàng</option><option value="needs_review">Cần kiểm tra dữ liệu</option></select></div>
-<div id="browseWrap" class="table-scroll"><table id="browseTable" aria-label="Danh sách sản phẩm"></table></div>
-<div id="browseEmpty" class="empty-state" hidden><span class="empty-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17 10a7 7 0 1 1-14 0 7 7 0 0 1 14 0m-2 5 6 6"/></svg></span><h3 id="browseEmptyTitle">Chưa có sản phẩm phù hợp</h3><p id="browseEmptyDescription">Thử từ khóa khác hoặc nhập thêm dữ liệu từ trang nguồn.</p><div class="button-row"><button id="clearProductFilters" type="button">Xóa bộ lọc</button><button type="button" class="button-primary" data-go-tab="import"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V4m-5 5 5-5 5 5M4 16v5h16v-5"/></svg>Nhập dữ liệu</button></div></div>
-<div class="table-footer"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10.3 4.5 2.5 18a1.5 1.5 0 0 0 1.3 2h16.4a1.5 1.5 0 0 0 1.3-2L13.7 4.5a2 2 0 0 0-3.4 0ZM12 9v4m0 3v.5"/></svg><span>Trạng thái dựa trên lần đọc gần nhất. Kiểm tra dữ liệu nguồn trước khi listing.</span></div></div>
-<details class="panel bulk-tools"><summary><span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 2.6 6.4L21 12l-6.4 2.6L12 21l-2.6-6.4L3 12l6.4-2.6L12 3Z"/></svg>Công cụ xử lý hàng loạt</span><span class="summary-hint">AI, phân nhóm &amp; số liệu eBay</span></summary><p class="muted">Áp dụng cho toàn bộ kho, không phụ thuộc bộ lọc. Gọi AI có thể phát sinh chi phí theo nhà cung cấp.</p><div class="bulk-grid"><div><h3>Gợi ý dữ liệu</h3><p>Đề xuất tiêu đề và thuộc tính. Duyệt từng gợi ý trước khi áp dụng.</p><button type="button" id="aiBulkBtn">Gợi ý AI hàng loạt</button></div><div><h3>Phân nhóm sản phẩm</h3><p>Gom nhóm, tra danh mục và tải CSV. Nhóm chưa xác minh được xuất bản nháp.</p><button type="button" id="aiGroupBtn">AI phân loại + xuất CSV</button></div><div><h3>Tham khảo eBay</h3><p>Tìm listing khớp cho sản phẩm chưa có số liệu để đối chiếu.</p><button type="button" id="ebayEnrichAllBtn">Tìm listing eBay</button></div></div></details>
-<div class="result-stack"><p id="ebayEnrichStatus" role="status"></p><p id="aiGroupStatus" role="status"></p><div id="aiGroupResults"></div><div id="ebayResolveResults"></div><p id="aiBulkStatus" role="status"></p><div id="aiBulkResults"></div></div><div id="detail" class="panel product-detail" hidden></div>
+
+<section id="tab-browse" aria-labelledby="browseHeading">
+  <div class="page-heading">
+    <div><h1 id="browseHeading">Kho sản phẩm</h1><p id="count" class="muted"></p></div>
+    <div class="button-row tight">
+      <button type="button" data-go-tab="import">Nhập dữ liệu</button>
+      <button type="button" class="button-primary" data-go-tab="export"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12m-5-5 5 5 5-5M4 15v5h16v-5"/></svg>Xuất CSV</button>
+    </div>
+  </div>
+  <div class="stats-grid">
+    <div class="stat-card"><span>Tổng sản phẩm</span><strong id="dashboardTotal">—</strong></div>
+    <div class="stat-card is-green"><span>Có hàng</span><strong id="dashboardAvailable">—</strong></div>
+    <div class="stat-card is-blue"><span>Đã xác minh danh mục</span><strong id="dashboardCategorized">—</strong></div>
+    <div class="stat-card is-amber"><span>Cần kiểm tra</span><strong id="dashboardReview">—</strong></div>
+  </div>
+  <div class="panel product-panel">
+    <div class="table-toolbar">
+      <div class="search-field"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17 10a7 7 0 1 1-14 0 7 7 0 0 1 14 0m-2 5 6 6"/></svg><label class="sr-only" for="productSearch">Tìm sản phẩm</label><input id="productSearch" type="search" placeholder="Tìm tên, SKU, thương hiệu…" autocomplete="off"/></div>
+      <label class="sr-only" for="productStockFilter">Lọc sản phẩm</label><select id="productStockFilter"><option value="all">Tất cả</option><option value="in_stock">Có hàng</option><option value="needs_review">Cần kiểm tra</option></select>
+    </div>
+    <div id="browseWrap" class="table-scroll"><table id="browseTable" aria-label="Danh sách sản phẩm"></table></div>
+    <div id="browseEmpty" class="empty-state" hidden><h3 id="browseEmptyTitle">Chưa có sản phẩm phù hợp</h3><p id="browseEmptyDescription">Thử từ khóa khác hoặc nhập thêm dữ liệu.</p><div class="button-row"><button id="clearProductFilters" type="button">Xóa bộ lọc</button><button type="button" class="button-primary" data-go-tab="import">Nhập dữ liệu</button></div></div>
+  </div>
+  <details class="panel bulk-tools"><summary>Công cụ hàng loạt <span class="summary-hint">AI gợi ý · phân nhóm · số liệu eBay</span></summary>
+    <p class="muted">Áp dụng cho toàn bộ kho (không theo bộ lọc). Gọi AI có thể tốn phí theo nhà cung cấp.</p>
+    <div class="bulk-grid">
+      <div><h3>Gợi ý dữ liệu</h3><p>Đề xuất tiêu đề và thuộc tính, duyệt trước khi áp dụng.</p><button type="button" id="aiBulkBtn">Gợi ý AI hàng loạt</button></div>
+      <div><h3>Phân nhóm sản phẩm</h3><p>Gom nhóm, tra danh mục và tải CSV theo nhóm.</p><button type="button" id="aiGroupBtn">AI phân loại + xuất CSV</button></div>
+      <div><h3>Tham khảo eBay</h3><p>Tìm listing khớp cho sản phẩm chưa có số liệu.</p><button type="button" id="ebayEnrichAllBtn">Tìm listing eBay</button></div>
+    </div>
+  </details>
+  <div class="result-stack"><p id="ebayEnrichStatus" role="status"></p><p id="aiGroupStatus" role="status"></p><div id="aiGroupResults"></div><div id="ebayResolveResults"></div><p id="aiBulkStatus" role="status"></p><div id="aiBulkResults"></div></div>
+  <div id="detail" class="panel product-detail" role="dialog" aria-modal="false" aria-label="Chi tiết sản phẩm" hidden></div>
 </section>
-<section id="tab-export" hidden aria-label="Xuất CSV eBay">
-<div class="page-heading"><div><p class="eyebrow">CHUẨN BỊ DỮ LIỆU LISTING</p><h1>Xuất CSV eBay</h1><p class="page-description">Tra đúng danh mục. Điền dữ liệu đã có. Biết rõ phần còn thiếu.</p></div><span class="tag">Mỗi SKU một dòng</span></div>
-<div class="export-grid"><div class="panel"><div class="panel-heading"><div><h2>Điền template theo danh mục</h2><p class="muted">Chọn sản phẩm và nhập Category ID để tạo file.</p></div><span class="section-icon blue"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12m-5-5 5 5 5-5M4 15v5h16v-5"/></svg></span></div><form id="categoryTemplateForm">
-        <label for="categoryProductSelect">Sản phẩm đã đọc</label>
-        <select id="categoryProductSelect" required><option value="">Chưa có sản phẩm</option></select>
-        <label for="categoryIdInput">Category ID eBay</label>
-        <input id="categoryIdInput" inputmode="numeric" pattern="[0-9]+" required placeholder="Nhập mã danh mục" />
-        <button id="categoryPrepareBtn" type="submit">Tra mã &amp; tải CSV</button>
-      </form><p class="field-hint">Category ID là mã danh mục, khác với Item ID của một listing.</p><p id="categoryPrepareStatus" role="status"></p><button id="downloadCategoryCsvBtn" type="button" disabled>Tải lại CSV vừa tạo</button></div><aside class="info-card"><span class="section-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m7 12 3 3 7-7M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0"/></svg></span><h3>Có dữ liệu đến đâu,<br/>xuất đến đó.</h3><p>Tool đối chiếu các trường bắt buộc theo danh mục và đánh dấu phần còn thiếu.</p><ul><li>Thiếu giá hoặc tỷ giá: để trống giá bán.</li><li>Thông tin shop: seller tự điền sau.</li><li>Kiểm tra file trước khi upload Seller Hub.</li></ul><p class="info-footnote">Tool chuẩn bị CSV, không tự đăng listing.</p></aside></div>
-<div id="categoryTemplatePreview" class="preview-area"></div>
-<div class="panel"><div class="panel-heading"><div><h2>Xuất theo nhóm danh mục</h2><p class="muted">Mỗi nhóm có danh mục đã xác minh được xuất thành một file.</p></div><span class="section-icon violet"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z"/></svg></span></div><p id="exportCount" class="muted"></p><details class="inline-details"><summary>Dùng mẫu CSV Seller Hub của bạn <span class="muted">(tùy chọn)</span></summary><label for="templateFile">Chọn file mẫu CSV</label><input id="templateFile" type="file" accept=".csv"/><p class="muted">Lấy mẫu tại <a href="https://www.ebay.com/sh/reports/uploads" target="_blank" rel="noopener">Seller Hub — Reports — Upload</a>.</p></details><p id="templateMsg" role="status"></p><div id="groupList"></div><button type="button" id="downloadGroupedBtn" class="button-primary">Xuất CSV theo nhóm</button><p id="exportMsg" role="status"></p></div>
-<div class="two-columns"><details class="panel"><summary>CSV cơ bản để đối chiếu</summary><p class="muted">Chưa kiểm đủ trường bắt buộc theo danh mục. Dùng để kiểm tra dữ liệu nguồn.</p><button type="button" id="downloadCsv">Tải CSV cơ bản</button></details><details class="panel"><summary>Số liệu eBay tham khảo</summary><p class="muted">File research riêng theo nhóm, gồm giá, listing khớp, số đã bán ước tính và người theo dõi. Số liệu thuộc toàn bộ listing; không upload file này vào Seller Hub.</p><button type="button" id="downloadResearchBtn">Xuất file research</button><p id="researchMsg" role="status"></p></details></div>
+
+<section id="tab-export" hidden aria-labelledby="exportHeading">
+  <div class="page-heading"><div><h1 id="exportHeading">Xuất CSV eBay</h1><p class="muted">Mỗi SKU một dòng. Tool chỉ chuẩn bị file, không tự đăng listing.</p></div></div>
+  <div class="panel">
+    <h2>Điền template theo danh mục</h2>
+    <form id="categoryTemplateForm" class="inline-form">
+      <div><label for="categoryProductSelect">Sản phẩm</label><select id="categoryProductSelect" required><option value="">Chưa có sản phẩm</option></select></div>
+      <div><label for="categoryIdInput">Category ID eBay</label><input id="categoryIdInput" inputmode="numeric" pattern="[0-9]+" required placeholder="vd 112581" /></div>
+      <button id="categoryPrepareBtn" type="submit">Tra mã &amp; tải CSV</button>
+    </form>
+    <p class="field-hint">Category ID là mã danh mục (khác Item ID). Thiếu giá/tỷ giá thì để trống giá bán; thông tin shop seller tự điền.</p>
+    <p id="categoryPrepareStatus" role="status"></p>
+    <button id="downloadCategoryCsvBtn" type="button" disabled>Tải lại CSV vừa tạo</button>
+  </div>
+  <div id="categoryTemplatePreview" class="preview-area"></div>
+  <div class="panel">
+    <h2>Xuất theo nhóm danh mục</h2>
+    <p id="exportCount" class="muted"></p>
+    <details class="inline-details"><summary>Dùng mẫu CSV Seller Hub của bạn <span class="muted">(tùy chọn)</span></summary><label for="templateFile">Chọn file mẫu CSV</label><input id="templateFile" type="file" accept=".csv"/><p class="muted">Lấy mẫu tại <a href="https://www.ebay.com/sh/reports/uploads" target="_blank" rel="noopener">Seller Hub — Reports — Upload</a>.</p></details>
+    <p id="templateMsg" role="status"></p>
+    <div id="groupList"></div>
+    <button type="button" id="downloadGroupedBtn" class="button-primary">Xuất CSV theo nhóm</button>
+    <p id="exportMsg" role="status"></p>
+  </div>
+  <div class="two-columns">
+    <details class="panel"><summary>CSV cơ bản để đối chiếu</summary><p class="muted">Chưa kiểm đủ trường bắt buộc theo danh mục; dùng để xem dữ liệu nguồn.</p><button type="button" id="downloadCsv">Tải CSV cơ bản</button></details>
+    <details class="panel"><summary>Số liệu eBay tham khảo</summary><p class="muted">File research theo nhóm (giá, listing khớp, đã bán, người theo dõi). Không upload file này lên Seller Hub.</p><button type="button" id="downloadResearchBtn">Xuất file research</button><p id="researchMsg" role="status"></p></details>
+  </div>
 </section>
-<section id="tab-ai" hidden aria-label="AI và kết nối">
-<div class="page-heading"><div><p class="eyebrow">KẾT NỐI NGUỒN DỮ LIỆU</p><h1>AI &amp; kết nối</h1><p class="page-description">Thiết lập AI hỗ trợ đọc thông tin và eBay để tra danh mục chính xác.</p></div></div>
-<div class="notice"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 2.6 6.4L21 12l-6.4 2.6L12 21l-2.6-6.4L3 12l6.4-2.6L12 3Z"/></svg><p>AI đưa ra gợi ý tiêu đề và thuộc tính. Bạn duyệt và bấm <strong>Áp dụng</strong> để lưu; giá bán và thông tin shop do seller quyết định.</p></div>
-<div class="two-columns align-start"><article class="panel"><div class="panel-heading"><div><h2>Trợ lý AI</h2><p class="muted">Hỗ trợ trích xuất &amp; chuẩn hóa dữ liệu</p></div><span class="section-icon violet"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 2.6 6.4L21 12l-6.4 2.6L12 21l-2.6-6.4L3 12l6.4-2.6L12 3Z"/></svg></span></div><p id="aiStatus" role="status">Đang kiểm tra kết nối AI…</p><form id="aiConfigForm">
+
+<section id="tab-import" hidden aria-labelledby="importHeading">
+  <div class="page-heading"><div><h1 id="importHeading">Nhập dữ liệu</h1><p class="muted">Cách nhanh nhất: mở trang sản phẩm, bấm <strong>Crawl AI trang này</strong> trong extension. Dưới đây là cách nhập JSON thủ công.</p></div><button type="button" data-go-tab="keys">Kết nối extension</button></div>
+  <div class="panel form-panel">
+    <label for="ingestKey">Khóa crawl</label><div class="input-action"><input id="ingestKey" type="password" autocomplete="off" placeholder="csvk_…"/><button type="button" id="pingBtn">Kiểm tra khóa</button></div><span id="pingMsg" role="status"></span>
+    <label for="recordsJson">Dữ liệu sản phẩm (JSON)</label><textarea id="recordsJson" rows="12" spellcheck="false" placeholder='[{"source_site":"example.com","source_product_id":"123","title":"Tên sản phẩm","variants":[]}]'></textarea>
+    <button type="button" id="importBtn" class="button-primary">Nhập vào kho sản phẩm</button>
+    <p id="importMsg" role="status"></p>
+  </div>
+</section>
+
+<section id="tab-settings" hidden aria-labelledby="settingsHeading">
+  <div class="page-heading"><div><h1 id="settingsHeading">Cài đặt</h1><p class="muted">Khóa dán trong web chỉ dùng tới khi tắt server; muốn giữ lâu dài, đặt trong file <code>.env</code> (<code>AI_API_KEY</code>, <code>EBAY_APP_ID</code>, <code>EBAY_CERT_ID</code>).</p></div></div>
+  <nav class="settings-nav" aria-label="Mục cài đặt"><a href="#settings-keys">Khóa crawl</a><a href="#settings-ai">AI</a><a href="#settings-ebay">eBay</a><a href="#settings-price">Giá bán</a></nav>
+
+  <div id="settings-keys" class="panel settings-block">
+    <h2>Khóa crawl (kết nối extension)</h2>
+    <p class="muted">1. Tạo khóa → 2. Mở extension, nhập địa chỉ tool và khóa → 3. Vào trang sản phẩm, bấm <strong>Crawl AI trang này</strong>. Khóa chỉ hiện một lần.</p>
+    <form id="keyForm" class="inline-form">
+      <div><label for="keyName">Tên khóa</label><input id="keyName" name="name" type="text" autocomplete="off" placeholder="vd: seller-a" /></div>
+      <button type="submit">Tạo khóa</button>
+    </form>
+    <p id="keyMsg" role="alert"></p><p id="keyOnce" class="key-reveal" hidden>Khóa mới — hãy lưu lại:<code class="key-once" id="keyOnceValue"></code></p>
+    <ul id="keyList" class="key-list"></ul>
+  </div>
+
+  <div class="two-columns align-start">
+    <div id="settings-ai" class="panel settings-block">
+      <h2>Trợ lý AI</h2>
+      <p id="aiStatus" role="status">Đang kiểm tra kết nối AI…</p>
+      <form id="aiConfigForm">
         <label for="aiProvider">Nhà cung cấp</label>
-        <select id="aiProvider" name="provider">
-          <option value="openai">OpenAI</option>
-          <option value="gemini">Google Gemini</option>
-        </select>
-        <label for="aiModel">Model (để trống để dùng mặc định)</label>
-        <input id="aiModel" name="model" type="text" autocomplete="off" placeholder="vd gpt-4o-mini hoặc gemini-2.5-flash" />
-        <label for="aiBaseUrl">Base URL (tùy chọn)</label>
-        <input id="aiBaseUrl" name="baseUrl" type="text" autocomplete="off" placeholder="vd https://api.openai.com/v1/chat/completions" />
+        <select id="aiProvider" name="provider"><option value="openai">OpenAI</option><option value="gemini">Google Gemini</option></select>
         <label for="aiKey">Khóa API</label>
         <input id="aiKey" name="apiKey" type="password" autocomplete="off" placeholder="sk-… (OpenAI) hoặc AQ.… / AIza… (Gemini)" />
+        <details class="inline-details"><summary>Nâng cao</summary>
+          <label for="aiModel">Model (để trống = mặc định)</label>
+          <input id="aiModel" name="model" type="text" autocomplete="off" placeholder="vd gpt-4o-mini hoặc gemini-2.5-flash" />
+          <label for="aiBaseUrl">Base URL (tùy chọn)</label>
+          <input id="aiBaseUrl" name="baseUrl" type="text" autocomplete="off" placeholder="vd https://api.openai.com/v1/chat/completions" />
+        </details>
         <button type="submit">Lưu kết nối AI</button>
         <button type="button" id="aiClearBtn">Xóa khóa đã dán</button>
-      </form><p id="aiConfigMsg" role="status"></p><p class="muted">Lấy khóa tại <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener">OpenAI</a> hoặc <a href="https://aistudio.google.com" target="_blank" rel="noopener">Google AI Studio</a>.</p></article><article class="panel"><div class="panel-heading"><div><h2>eBay Taxonomy</h2><p class="muted">Danh mục &amp; các trường sản phẩm</p></div><span class="section-icon blue"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3h8l10 10-8 8L3 11V3ZM7 7h.01"/></svg></span></div><p id="ebayStatus" role="status">Đang kiểm tra kết nối eBay…</p><form id="ebayConfigForm">
+      </form>
+      <p id="aiConfigMsg" role="status"></p>
+      <p class="muted">Lấy khóa tại <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener">OpenAI</a> hoặc <a href="https://aistudio.google.com" target="_blank" rel="noopener">Google AI Studio</a>. AI chỉ gợi ý; bạn duyệt rồi bấm Áp dụng.</p>
+    </div>
+    <div id="settings-ebay" class="panel settings-block">
+      <h2>eBay Taxonomy</h2>
+      <p id="ebayStatus" role="status">Đang kiểm tra kết nối eBay…</p>
+      <form id="ebayConfigForm">
         <label for="ebayEnvironment">Môi trường</label>
-        <select id="ebayEnvironment" name="environment">
-          <option value="production">Production — danh mục thật</option>
-          <option value="sandbox">Sandbox — thử nghiệm</option>
-        </select>
+        <select id="ebayEnvironment" name="environment"><option value="production">Production — danh mục thật</option><option value="sandbox">Sandbox — thử nghiệm</option></select>
         <label for="ebayAppId">App ID (Client ID)</label>
-        <input id="ebayAppId" name="appId" type="password" autocomplete="off" placeholder="vd: YourName-xxx-PRD-xxxxxxxx-xxxxxxx" />
+        <input id="ebayAppId" name="appId" type="password" autocomplete="off" placeholder="YourName-xxx-PRD-xxxxxxxx-xxxxxxx" />
         <label for="ebayCertId">Cert ID (Client Secret)</label>
-        <input id="ebayCertId" name="certId" type="password" autocomplete="off" placeholder="vd: PRD-xxxxxxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" />
+        <input id="ebayCertId" name="certId" type="password" autocomplete="off" placeholder="PRD-xxxxxxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" />
         <button type="submit">Lưu khóa eBay</button>
         <button type="button" id="ebayCheckBtn">Kiểm tra kết nối</button>
         <button type="button" id="ebayClearBtn">Xóa khóa đã dán</button>
-      </form><p id="ebayConfigMsg" role="status"></p></article></div>
-<details class="panel"><summary>Khóa API được lưu như thế nào?</summary><p class="muted">Khóa dán trong web chỉ dùng trong phiên chạy của server. Để dùng sau khi khởi động lại, cấu hình trong file <code>.env</code>: <code>AI_API_KEY</code>, <code>EBAY_APP_ID</code> và <code>EBAY_CERT_ID</code>. Cấu hình môi trường được ưu tiên. Khóa không được đưa vào extension.</p></details>
+      </form>
+      <p id="ebayConfigMsg" role="status"></p>
+    </div>
+  </div>
+
+  <div id="settings-price" class="panel settings-block">
+    <h2>Cấu hình giá</h2>
+    <p class="muted">Giá bán = (giá nguồn + ship + thuế) × (1 + markup) ÷ (1 − phí eBay), làm tròn .99. Tỷ lệ nhập dạng thập phân: 0.35 = 35%. Giá chốt riêng từng sản phẩm được ưu tiên.</p>
+    <form id="configForm" class="grid-form">
+      <div><label for="markupPct">Markup lợi nhuận</label><input id="markupPct" name="markupPct" type="number" step="0.01" min="0" /></div>
+      <div><label for="ebayFeePct">Phí eBay</label><input id="ebayFeePct" name="ebayFeePct" type="number" step="0.01" min="0" max="1" /></div>
+      <div><label for="shippingCost">Phí ship (USD)</label><input id="shippingCost" name="shippingCost" type="number" step="0.01" min="0" /></div>
+      <div><label for="taxPct">Thuế</label><input id="taxPct" name="taxPct" type="number" step="0.01" min="0" max="1" /></div>
+      <button type="submit">Lưu cấu hình</button>
+    </form>
+    <p id="configMsg" role="status"></p>
+  </div>
 </section>
-<section id="tab-config" hidden aria-label="Cấu hình giá">
-<div class="page-heading"><div><p class="eyebrow">QUY TẮC TÍNH GIÁ</p><h1>Cấu hình giá</h1><p class="page-description">Thiết lập cách tính giá bán từ dữ liệu nguồn.</p></div></div>
-<div class="panel form-panel"><h2>Chi phí &amp; lợi nhuận</h2><p class="muted">Các tỷ lệ được nhập dưới dạng thập phân: 0.35 tương ứng 35%.</p><form id="configForm">
-        <label for="markupPct">Markup % lợi nhuận (vd 0.35 = 35%)</label>
-        <input id="markupPct" name="markupPct" type="number" step="0.01" min="0" />
-        <label for="ebayFeePct">Phí eBay % (vd 0.13 = 13%)</label>
-        <input id="ebayFeePct" name="ebayFeePct" type="number" step="0.01" min="0" max="1" />
-        <label for="shippingCost">Phí ship (USD)</label>
-        <input id="shippingCost" name="shippingCost" type="number" step="0.01" min="0" />
-        <label for="taxPct">Thuế % (vd 0 = không thuế)</label>
-        <input id="taxPct" name="taxPct" type="number" step="0.01" min="0" max="1" />
-        <button type="submit">Lưu cấu hình</button>
-      </form><p id="configMsg" role="status"></p><div class="formula-note"><strong>Cách tính giá</strong><p>(Giá nguồn + vận chuyển + thuế) × (1 + markup) ÷ (1 − phí eBay), làm tròn .99.</p><span class="muted">Giá bán đã chốt riêng được ưu tiên. Nguồn khác tiền tệ cần có tỷ giá rõ ràng.</span></div></div>
-</section>
-<section id="tab-keys" hidden aria-label="Khóa crawl">
-<div class="page-heading"><div><p class="eyebrow">KẾT NỐI EXTENSION</p><h1>Khóa crawl</h1><p class="page-description">Cấp khóa riêng cho mỗi người hoặc công cụ đọc dữ liệu.</p></div></div>
-<div class="two-columns align-start"><article class="panel"><h2>Tạo khóa kết nối</h2><p class="muted">Khóa mới chỉ hiển thị một lần. Sao chép và lưu lại sau khi tạo.</p><form id="keyForm">
-        <label for="keyName">Tên khóa (vd tên người dùng hoặc tên crawler)</label>
-        <input id="keyName" name="name" type="text" autocomplete="off" placeholder="vd: seller-a" />
-        <button type="submit">Tạo khóa</button>
-      </form><p id="keyMsg" role="alert"></p><p id="keyOnce" class="key-reveal" hidden>Khóa mới — hãy lưu lại:<code class="key-once" id="keyOnceValue"></code></p></article><aside class="info-card"><h3>Kết nối trong 3 bước</h3><ol><li>Tạo và sao chép khóa crawl.</li><li>Mở extension, nhập địa chỉ tool và khóa.</li><li>Vào trang sản phẩm, bấm <strong>Crawl AI trang này</strong>.</li></ol><p>Sản phẩm đọc được sẽ xuất hiện trong Kho sản phẩm.</p></aside></div><div class="panel"><h2>Khóa đã tạo</h2><ul id="keyList" class="key-list"></ul></div>
-</section>
-<section id="tab-import" hidden aria-label="Nhập dữ liệu">
-<div class="page-heading"><div><p class="eyebrow">THÊM DỮ LIỆU VÀO KHO</p><h1>Nhập dữ liệu</h1><p class="page-description">Nhận sản phẩm từ extension hoặc nhập trực tiếp bằng JSON.</p></div></div>
-<div class="notice"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m10 13 4-4m-6 6-1 1a4 4 0 0 1-6-6l4-4a4 4 0 0 1 6 0m2 3 1-1a4 4 0 0 1 6 6l-4 4a4 4 0 0 1-6 0"/></svg><p>Đọc từ website? Mở trang sản phẩm và bấm <strong>Crawl AI trang này</strong> trong extension. Dữ liệu sẽ được gửi về kho của tool.</p><button type="button" data-go-tab="keys">Thiết lập kết nối</button></div>
-<div class="panel form-panel"><h2>Nhập sản phẩm bằng JSON</h2><p class="muted">Dành cho dữ liệu có sẵn từ crawler. Dán một mảng records theo định dạng của tool.</p><label for="ingestKey">Khóa crawl</label><div class="input-action"><input id="ingestKey" type="password" autocomplete="off" placeholder="csvk_…"/><button type="button" id="pingBtn">Kiểm tra khóa</button></div><span id="pingMsg" role="status"></span><label for="recordsJson">Dữ liệu sản phẩm (JSON)</label><textarea id="recordsJson" rows="12" spellcheck="false" placeholder='[{"source_site":"example.com","source_product_id":"123","title":"Tên sản phẩm","variants":[]}]'></textarea><button type="button" id="importBtn" class="button-primary"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V4m-5 5 5-5 5 5M4 16v5h16v-5"/></svg>Nhập vào kho sản phẩm</button><p id="importMsg" role="status"></p></div>
-</section>
-</main><footer class="page-footer"><span>Tool lấy dữ liệu</span><span>Dữ liệu nguồn rõ ràng · CSV dễ kiểm tra</span></footer>
+
+</main>
 </div><script type="module" src="./app.js"></script>
 </body></html>

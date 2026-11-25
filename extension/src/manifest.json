@@ -1,16 +1,23 @@
 {
   "manifest_version": 3,
   "name": "CSV Studio Crawler",
-  "version": "1.3.7",
-  "description": "Đọc sản phẩm trên trang đang mở, AI trích xuất có cấu trúc rồi gửi vào tool CSV Listing eBay của team. Web tự tìm listing eBay khớp, lấy số đã bán + người theo dõi.",
+  "version": "1.4.0",
+  "minimum_chrome_version": "116",
+  "description": "Đọc sản phẩm trên trang đang mở, AI trích xuất có cấu trúc rồi gửi vào tool CSV Listing eBay của team. Bảng bên cạnh giữ nguyên khi đổi tab.",
   "action": {
-    "default_title": "Crawl trang này vào CSV Listing eBay",
-    "default_popup": "popup.html"
+    "default_title": "Mở bảng CSV Studio Crawler"
+  },
+  "side_panel": {
+    "default_path": "popup.html"
+  },
+  "background": {
+    "service_worker": "dist/background.js"
   },
   "permissions": [
     "storage",
     "activeTab",
     "scripting",
+    "sidePanel",
     "tabs"
   ],
   "optional_host_permissions": [

@@ -6,7 +6,7 @@
 // Chạy: npm run build:extension
 // Cài thử: chrome://extensions -> Developer mode -> Load unpacked -> extension-v2/
 
-import { cpSync, existsSync, mkdirSync, rmSync, readFileSync, realpathSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, rmSync, readFileSync, readdirSync, realpathSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -31,25 +31,37 @@ cpSync(src, out, { recursive: true });
 console.log(`Đã copy ${src} -> ${out}`);
 
 // Kiểm tra cú pháp tất cả file JS trong bản build.
-for (const f of ['dist/content.js', 'dist/popup.js']) {
+for (const f of ['dist/content.js', 'dist/popup.js', 'dist/background.js']) {
   execFileSync('node', ['--check', path.join(out, f)], { stdio: 'inherit' });
 }
-console.log('Kiểm tra cú pháp OK: content.js, popup.js');
+console.log('Kiểm tra cú pháp OK: content.js, popup.js, background.js');
 
 // Windows ships PowerShell's Compress-Archive; Unix uses zip.
+// manifest.json phải nằm ở GỐC file ZIP (Chrome Web Store yêu cầu) — nén
+// nội dung bên trong extension-v2/, không nén cả thư mục.
 mkdirSync(path.join(root, 'dist'), { recursive: true });
+rmSync(zipFile, { force: true });
 if (process.platform === 'win32') {
-  execFileSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command',
-    'Compress-Archive -LiteralPath $env:CSV_STUDIO_BUILD_SOURCE -DestinationPath $env:CSV_STUDIO_BUILD_ZIP -Force'], {
-    env: { ...process.env, CSV_STUDIO_BUILD_SOURCE: out, CSV_STUDIO_BUILD_ZIP: zipFile },
-    stdio: 'inherit',
-  });
+  // Ưu tiên tar.exe (bsdtar, có sẵn từ Windows 10): đường dẫn trong ZIP dùng
+  // '/' đúng chuẩn. Compress-Archive của PowerShell 5.1 ghi 'dist\content.js'
+  // (dấu '\'), giải nén ngoài Windows bị lỗi — chỉ dùng làm dự phòng.
+  try {
+    execFileSync('tar.exe', ['-a', '-c', '-f', zipFile, '-C', out, ...readdirSync(out)], { stdio: 'inherit' });
+  } catch {
+    rmSync(zipFile, { force: true });
+    execFileSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command',
+      '$ErrorActionPreference = "Stop"; $ProgressPreference = "SilentlyContinue"; Compress-Archive -Path (Join-Path -Path $env:CSV_STUDIO_BUILD_SOURCE -ChildPath "*") -DestinationPath $env:CSV_STUDIO_BUILD_ZIP -Force'], {
+      env: { ...process.env, CSV_STUDIO_BUILD_SOURCE: out, CSV_STUDIO_BUILD_ZIP: zipFile },
+      stdio: 'inherit',
+    });
+  }
 } else {
-  rmSync(zipFile, { force: true });
-  execFileSync('zip', ['-r', '-q', zipFile, 'extension-v2'], {
-    cwd: root,
+  execFileSync('zip', ['-r', '-q', zipFile, '.'], {
+    cwd: out,
     stdio: 'inherit',
   });
 }
+// Compress-Archive có thể lỗi mà powershell vẫn thoát 0 — kiểm tra file thật.
+if (!existsSync(zipFile)) throw new Error(`Không tạo được file ZIP: ${zipFile}`);
 console.log(`Đã nén: ${zipFile}`);
 console.log('Cài thử: mở chrome://extensions, bật Developer mode, "Load unpacked" và chọn extension-v2/');

@@ -81,19 +81,42 @@ export function saveSnapshot(store, filePath) {
   mkdirSync(path.dirname(filePath), { recursive: true });
   const tmp = `${filePath}.tmp-${process.pid}`;
   writeFileSync(tmp, JSON.stringify(snapshot, null, 2), 'utf-8');
-  renameSync(tmp, filePath);
+  renameWithRetry(tmp, filePath);
   return snapshot;
+}
+
+/** Windows: antivirus/indexer giữ file đích trong tích tắc làm renameSync
+ *  lỗi EPERM/EBUSY/EACCES — thử lại vài lần thay vì bỏ lưu im lặng. */
+function renameWithRetry(from, to, attempts = 5) {
+  for (let i = 1; ; i++) {
+    try {
+      renameSync(from, to);
+      return;
+    } catch (e) {
+      if (i >= attempts || !['EPERM', 'EBUSY', 'EACCES'].includes(e?.code)) throw e;
+      const until = Date.now() + 20 * i;
+      while (Date.now() < until) { /* chờ ngắn, đồng bộ */ }
+    }
+  }
 }
 
 /** MemoryStore có lưu file. Nạp snapshot lúc khởi tạo; mỗi lần đổi dữ liệu
  *  (thêm/sửa sản phẩm, đổi config, tạo/xoá khóa, ghi lỗi crawl, xoá dữ liệu)
- *  thì ghi file ngay. Lỗi ghi file chỉ log, không làm sập server.
+ *  thì ghi file. Lỗi ghi file chỉ log, không làm sập server.
  *  Riêng verifyApiKeyRecord (ping kiểm tra khóa) chỉ đổi last_used_at trong
- *  RAM nên KHÔNG ghi file — tránh ghi đĩa mỗi lần extension ping. */
+ *  RAM nên KHÔNG ghi file — tránh ghi đĩa mỗi lần extension ping.
+ *
+ *  debounceMs (mặc định 0 = ghi ngay, dùng trong test): > 0 thì gom nhiều
+ *  thay đổi liên tiếp thành 1 lần ghi (ingest 200 record trước đây ghi lại
+ *  TOÀN BỘ file ~400 lần, chặn event loop). Dev server dùng 250ms và gọi
+ *  flush() khi tắt (Ctrl+C / exit) để không mất thay đổi cuối. */
 export class LocalFileStore extends MemoryStore {
-  constructor(filePath = resolveDataFilePath()) {
+  constructor(filePath = resolveDataFilePath(), { debounceMs = 0 } = {}) {
     super();
     this.dataFile = filePath;
+    this.debounceMs = Math.max(0, Number(debounceMs) || 0);
+    this.dirty = false;
+    this.flushTimer = null;
     const { snapshot, corrupt, backup } = loadSnapshot(filePath);
     for (const p of snapshot.products) {
       if (p && typeof p === 'object' && p.id) this.products.set(p.id, p);
@@ -109,9 +132,25 @@ export class LocalFileStore extends MemoryStore {
   }
 
   persist() {
+    this.dirty = true;
+    if (!this.debounceMs) return this.flush();
+    if (!this.flushTimer) {
+      this.flushTimer = setTimeout(() => { this.flushTimer = null; this.flush(); }, this.debounceMs);
+      // Không giữ process sống chỉ vì timer ghi file; exit/SIGINT gọi flush().
+      this.flushTimer.unref?.();
+    }
+    return this;
+  }
+
+  /** Ghi ngay nếu còn thay đổi chưa lưu (đồng bộ — an toàn trong 'exit'). */
+  flush() {
+    if (this.flushTimer) { clearTimeout(this.flushTimer); this.flushTimer = null; }
+    if (!this.dirty) return this;
+    this.dirty = false;
     try {
       saveSnapshot(this, this.dataFile);
     } catch (e) {
+      this.dirty = true;
       console.error(`[local-store] không ghi được ${this.dataFile}:`, e?.message ?? e);
     }
     return this;

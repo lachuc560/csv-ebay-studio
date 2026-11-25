@@ -821,6 +821,8 @@ export async function handleRequest(store, { method, path, headers, body, bodyTe
       let products = null;
       if (Array.isArray(payload.products)) products = payload.products;
       else if (Array.isArray(payload.productIds)) {
+        // Chặn trước vòng lặp: 500k id vẫn lọt 6MB body và sẽ gây 500k lần đọc store.
+        if (payload.productIds.length > MAX_RECORDS_PER_REQUEST) return err(400, 'too_many_products', { max: MAX_RECORDS_PER_REQUEST });
         products = [];
         const missing = [];
         for (const id of payload.productIds) {
@@ -979,6 +981,7 @@ export async function handleRequest(store, { method, path, headers, body, bodyTe
         return ok(200, { ok: true, ...status });
       } catch (e) {
         if (e?.code === 'invalid_provider') return err(400, 'invalid_provider', { provider: e.provider });
+        if (e?.code === 'invalid_base_url') return err(400, 'invalid_base_url');
         throw e;
       }
     }
@@ -1112,7 +1115,8 @@ export async function handleRequest(store, { method, path, headers, body, bodyTe
       const product = await store.getProduct(productId);
       if (!product) return err(404, 'not_found');
       const forceItemId = payload.ebayItemId != null ? String(payload.ebayItemId).trim() : null;
-      const enrichment = await browseRuntime.enrichProduct(product, { forceItemId: forceItemId || undefined });
+      // fresh: seller bấm "Tìm lại"/sửa tay -> tra lại eBay, không dùng cache.
+      const enrichment = await browseRuntime.enrichProduct(product, { forceItemId: forceItemId || undefined, fresh: true });
       if (enrichment.code === 'ebay_not_configured') return err(400, 'ebay_not_configured', { message: enrichment.warning });
       if (enrichment.code === 'ebay_auth_failed') return err(502, 'ebay_auth_failed', { message: enrichment.warning });
       let saved = product;
@@ -1135,6 +1139,7 @@ export async function handleRequest(store, { method, path, headers, body, bodyTe
       }
       let products;
       if (Array.isArray(payload.productIds)) {
+        if (payload.productIds.length > MAX_RECORDS_PER_REQUEST) return err(400, 'too_many_products', { max: MAX_RECORDS_PER_REQUEST });
         products = [];
         for (const id of payload.productIds) {
           const p = await store.getProduct(String(id));
@@ -1209,7 +1214,15 @@ export default {
     // Env Workers cho ảnh Cloudflare R2 (CLOUDFLARE_R2_* đặt bằng
     // `wrangler pages secret put`) đưa vào runtime ảnh.
     applyEnvToImagesRuntime(defaultCloudflareImagesRuntime, env ?? {});
-    const { status, json } = await handleRequest(new D1Store(env), {
+    let store;
+    try {
+      store = new D1Store(env);
+    } catch (e) {
+      // Thiếu binding D1 (wrangler.toml) — trả JSON thay vì 500 rỗng.
+      console.error('[api] D1Store init error:', e);
+      return new Response(JSON.stringify({ error: 'server_error' }), { status: 500, headers });
+    }
+    const { status, json } = await handleRequest(store, {
       method: req.method,
       // Giữ cả query string trong path để endpoint tra tay
       // (/api/ebay/category-suggestions?q=...) đọc được từ khoá — splitPath

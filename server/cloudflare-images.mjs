@@ -115,6 +115,105 @@ function cachePut(map, key, value) {
   map.set(key, value);
 }
 
+/** IPv4 dạng a.b.c.d thuộc dải nội bộ/loopback/link-local/không định tuyến. */
+function isPrivateIpv4(host) {
+  const m = host.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+  if (!m) return false;
+  const [a, b] = [Number(m[1]), Number(m[2])];
+  return a === 0 || a === 10 || a === 127 || a >= 224
+    || (a === 169 && b === 254) || (a === 172 && b >= 16 && b <= 31)
+    || (a === 192 && b === 168) || (a === 100 && b >= 64 && b <= 127);
+}
+
+/**
+ * Chặn SSRF khi server tải ảnh để mirror lên R2 (ảnh tải về được PUT lên
+ * bucket CÔNG KHAI, nên tải nhầm URL nội bộ = công khai dữ liệu nội bộ).
+ * Chỉ nhận http(s) tới host công khai: loại localhost, IP nội bộ/loopback/
+ * link-local (169.254.169.254 metadata), IPv6 nội bộ. Kiểm tra theo tên
+ * host/IP trong URL (không tra DNS) — đủ chặn các payload trực tiếp.
+ */
+export function isAllowedImageSourceUrl(value) {
+  let url;
+  try { url = new URL(String(value ?? '').trim()); } catch { return false; }
+  if (!/^https?:$/.test(url.protocol)) return false;
+  if (url.username || url.password) return false;
+  const host = url.hostname.toLowerCase().replace(/^\[|\]$/g, '');
+  if (!host || host === 'localhost' || host.endsWith('.localhost') || host.endsWith('.local') || host.endsWith('.internal')) return false;
+  if (isPrivateIpv4(host)) return false;
+  if (host.includes(':')) {
+    if (host === '::' || host === '::1' || /^f[cd]/.test(host) || /^fe[89ab]/.test(host)) return false;
+    const mapped = host.match(/^::ffff:(.+)$/);
+    if (mapped) {
+      const v4 = mapped[1];
+      if (isPrivateIpv4(v4)) return false;
+      // Dạng hex ::ffff:7f00:1 (URL tự chuẩn hoá) -> đổi ra a.b.c.d.
+      const hex = v4.match(/^([0-9a-f]{1,4}):([0-9a-f]{1,4})$/);
+      if (hex) {
+        const hi = parseInt(hex[1], 16);
+        const lo = parseInt(hex[2], 16);
+        if (isPrivateIpv4(`${hi >> 8}.${hi & 255}.${lo >> 8}.${lo & 255}`)) return false;
+      }
+    }
+  }
+  return true;
+}
+
+/** Content-type ảnh được nhận để mirror. SVG bị loại: có thể chứa script
+ *  (stored XSS trên tên miền ảnh công khai). Không có content-type hoặc
+ *  octet-stream (một số CDN) vẫn nhận. */
+function isAcceptedImageContentType(contentType) {
+  const type = String(contentType ?? '').split(';')[0].trim().toLowerCase();
+  if (!type || type === 'application/octet-stream' || type === 'binary/octet-stream') return true;
+  return /^image\//.test(type) && !/svg/.test(type);
+}
+
+/** Đọc body có giới hạn dung lượng + thời gian: dừng ngay khi vượt
+ *  maxBytes (không nạp cả file GB vào RAM) và khi quá timeoutMs (server
+ *  nhả từng byte). Response mock không có body stream thì dùng arrayBuffer. */
+async function readBodyLimited(res, maxBytes, timeoutMs, url) {
+  const tooLarge = (n) => new CloudflareImagesError('r2_download_failed',
+    `Ảnh gốc ${url} quá lớn (${Math.round(n / 1024 / 1024)}MB > ${Math.round(maxBytes / 1024 / 1024)}MB) — giữ link gốc.`);
+  let timer;
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(() => {
+      try { res.body?.cancel?.(); } catch { /* bỏ qua */ }
+      reject(new CloudflareImagesError('r2_timeout', `Tải ảnh timeout sau ${Math.round(timeoutMs / 1000)}s (${url})`));
+    }, timeoutMs);
+  });
+  const read = (async () => {
+    const reader = typeof res.body?.getReader === 'function' ? res.body.getReader() : null;
+    if (!reader) {
+      const bytes = new Uint8Array(await res.arrayBuffer());
+      if (bytes.length > maxBytes) throw tooLarge(bytes.length);
+      return bytes;
+    }
+    const chunks = [];
+    let total = 0;
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      total += value.byteLength;
+      if (total > maxBytes) {
+        try { await reader.cancel(); } catch { /* bỏ qua */ }
+        throw tooLarge(total);
+      }
+      chunks.push(value);
+    }
+    const out = new Uint8Array(total);
+    let offset = 0;
+    for (const c of chunks) { out.set(c, offset); offset += c.byteLength; }
+    return out;
+  })();
+  try {
+    return await Promise.race([read, timeout]);
+  } finally {
+    clearTimeout(timer);
+    read.catch(() => {}); // tránh unhandled rejection khi timeout thắng
+  }
+}
+
+const R2_MAX_REDIRECTS = 3;
+
 /** Lấy env R2 từ một object env (process.env ở dev, env Workers khi deploy).
  *  Key CHỈ kiểm tra không rỗng — không kiểm tra định dạng. */
 export function pickR2Env(env) {
@@ -191,7 +290,7 @@ export class CloudflareImagesRuntime {
     const hash = await sha256Hex(url);
     let ext = '.jpg';
     try {
-      const m = new URL(url).pathname.match(/\.(jpe?g|png|webp|gif|avif|svg)$/i);
+      const m = new URL(url).pathname.match(/\.(jpe?g|png|webp|gif|avif)$/i);
       if (m) ext = m[1].toLowerCase() === 'jpeg' ? '.jpg' : `.${m[1].toLowerCase()}`;
     } catch { /* URL hỏng: key vẫn tính được từ hash, upload sẽ lỗi sau */ }
     return `images/${hash.slice(0, 2)}/${hash}${ext}`;
@@ -215,10 +314,25 @@ export class CloudflareImagesRuntime {
     }
     const cached = this.urlCache.get(url);
     if (cached) return cached;
-    // 1. Tải ảnh gốc (20s, tối đa 20MB).
+    if (!isAllowedImageSourceUrl(url)) {
+      throw new CloudflareImagesError('invalid_url', `URL ảnh không hợp lệ hoặc trỏ vào mạng nội bộ (${url}) — giữ link gốc.`);
+    }
+    // 1. Tải ảnh gốc (20s, tối đa 20MB). Tự theo redirect (tối đa 3 lần) để
+    //    kiểm tra lại từng đích — redirect sang IP nội bộ cũng bị chặn.
     let res;
+    let current = url;
     try {
-      res = await fetchWithTimeout(url, { method: 'GET' }, this.fetchFn, R2_IMAGE_TIMEOUT_MS);
+      for (let hop = 0; ; hop++) {
+        res = await fetchWithTimeout(current, { method: 'GET', redirect: 'manual' }, this.fetchFn, R2_IMAGE_TIMEOUT_MS);
+        const location = res.status >= 300 && res.status < 400 && typeof res.headers?.get === 'function' ? res.headers.get('location') : null;
+        if (!location) break;
+        if (hop >= R2_MAX_REDIRECTS) throw new Error('quá nhiều redirect');
+        const next = new URL(location, current).href;
+        if (!isAllowedImageSourceUrl(next)) {
+          throw new CloudflareImagesError('invalid_url', `Ảnh gốc ${url} chuyển hướng tới địa chỉ không được phép — giữ link gốc.`);
+        }
+        current = next;
+      }
     } catch (e) {
       if (e instanceof CloudflareImagesError) throw e;
       throw new CloudflareImagesError('r2_download_failed', `Không tải được ảnh gốc ${url} (${e?.message ?? 'lỗi mạng'}) — giữ link gốc.`);
@@ -230,18 +344,22 @@ export class CloudflareImagesRuntime {
     if (contentType && /^text\/html/i.test(contentType)) {
       throw new CloudflareImagesError('r2_download_failed', `Ảnh gốc ${url} trả về trang HTML (có thể link lỗi/trang chặn bot) — giữ link gốc.`);
     }
+    if (!isAcceptedImageContentType(contentType)) {
+      throw new CloudflareImagesError('r2_download_failed', `Ảnh gốc ${url} không phải ảnh hợp lệ (${contentType}) — giữ link gốc.`);
+    }
+    const declaredLength = Number(typeof res.headers?.get === 'function' ? res.headers.get('content-length') : NaN);
+    if (Number.isFinite(declaredLength) && declaredLength > R2_MAX_IMAGE_BYTES) {
+      throw new CloudflareImagesError('r2_download_failed', `Ảnh gốc ${url} quá lớn (${Math.round(declaredLength / 1024 / 1024)}MB > 20MB) — giữ link gốc.`);
+    }
     let bytes;
     try {
-      const buf = await res.arrayBuffer();
-      bytes = new Uint8Array(buf);
+      bytes = await readBodyLimited(res, R2_MAX_IMAGE_BYTES, R2_IMAGE_TIMEOUT_MS, url);
     } catch (e) {
+      if (e instanceof CloudflareImagesError) throw e;
       throw new CloudflareImagesError('r2_download_failed', `Không đọc được ảnh gốc ${url} (${e?.message ?? 'lỗi đọc'}) — giữ link gốc.`);
     }
     if (!bytes.length) {
       throw new CloudflareImagesError('r2_download_failed', `Ảnh gốc ${url} rỗng — giữ link gốc.`);
-    }
-    if (bytes.length > R2_MAX_IMAGE_BYTES) {
-      throw new CloudflareImagesError('r2_download_failed', `Ảnh gốc ${url} quá lớn (${Math.round(bytes.length / 1024 / 1024)}MB > 20MB) — giữ link gốc.`);
     }
     // 2. Upload lên R2 bằng PUT + SigV4.
     const key = await this.imageKeyForUrl(url);

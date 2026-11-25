@@ -13,6 +13,11 @@ import { defaultEbayTaxonomyRuntime, applyEnvToEbayRuntime } from '../server/eba
 import { defaultCloudflareImagesRuntime, applyEnvToImagesRuntime } from '../server/cloudflare-images.mjs';
 
 const PORT = Number(process.env.PORT ?? 8787);
+// Mặc định chỉ nghe trên máy này (127.0.0.1): API local không có đăng nhập,
+// mở ra cả mạng LAN thì máy khác đọc được kho sản phẩm / tạo khóa crawl.
+// Muốn mở cho máy khác: đặt HOST=0.0.0.0 (tự chịu rủi ro).
+const HOST = process.env.HOST?.trim() || '127.0.0.1';
+const LOOPBACK_HOSTS = new Set(['127.0.0.1', 'localhost', '::1', '[::1]']);
 const PUBLIC_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', 'public');
 
 /** Load file .env ở gốc repo vào process.env (chỉ khi biến chưa có sẵn).
@@ -53,7 +58,15 @@ applyEnvToImagesRuntime(defaultCloudflareImagesRuntime, process.env);
 // bằng biến môi trường CSV_STUDIO_DATA_FILE. MemoryStore thuần vẫn dùng
 // trong test; bản deploy Cloudflare vẫn dùng D1.
 const DATA_FILE = resolveDataFilePath();
-const store = new LocalFileStore(DATA_FILE);
+// Gom các lần ghi trong 250ms thành 1 (ingest hàng loạt không ghi lại cả
+// file hàng trăm lần). Tắt server bằng Ctrl+C / kill vẫn ghi nốt.
+const store = new LocalFileStore(DATA_FILE, { debounceMs: 250 });
+process.on('exit', () => store.flush());
+for (const signal of ['SIGINT', 'SIGTERM', 'SIGBREAK', 'SIGHUP']) {
+  try {
+    process.on(signal, () => { store.flush(); process.exit(0); });
+  } catch { /* tín hiệu không hỗ trợ trên nền tảng này */ }
+}
 
 const MIME = {
   '.html': 'text/html; charset=utf-8',
@@ -68,13 +81,46 @@ const MIME = {
   '.ico': 'image/x-icon',
 };
 
-function sendJson(res, status, json) {
+/** Chỉ cho phép CORS từ extension Chrome và chính trang tool trên máy này.
+ *  Trước đây trả `*`: bất kỳ website nào đang mở trong trình duyệt cũng
+ *  fetch được http://localhost:8787/api/... và đọc kho sản phẩm. */
+export function allowedCorsOrigin(origin) {
+  if (typeof origin !== 'string' || !origin) return null;
+  if (/^chrome-extension:\/\/[a-p]{32}$/.test(origin)) return origin;
+  try {
+    const u = new URL(origin);
+    if (u.protocol === 'http:' && LOOPBACK_HOSTS.has(u.hostname)) return origin;
+  } catch { /* origin hỏng */ }
+  return null;
+}
+
+function corsHeaders(req) {
+  const origin = allowedCorsOrigin(req?.headers?.origin);
+  return origin
+    ? {
+      'Access-Control-Allow-Origin': origin,
+      'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+      'Access-Control-Allow-Headers': 'Authorization, Content-Type',
+      Vary: 'Origin',
+    }
+    : { Vary: 'Origin' };
+}
+
+/** Chống DNS rebinding: khi server chỉ nghe loopback, từ chối request có
+ *  Host không phải localhost/127.0.0.1/[::1] (trang lạ trỏ tên miền về
+ *  127.0.0.1 để đọc API). HOST tuỳ chỉnh (0.0.0.0...) thì bỏ qua kiểm tra. */
+export function isAllowedHostHeader(hostHeader, listenHost = HOST) {
+  if (!LOOPBACK_HOSTS.has(listenHost)) return true;
+  if (typeof hostHeader !== 'string' || !hostHeader) return false;
+  const name = hostHeader.trim().toLowerCase().replace(/:\d+$/, '');
+  return LOOPBACK_HOSTS.has(name);
+}
+
+function sendJson(res, status, json, req) {
   const body = JSON.stringify(json);
   res.writeHead(status, {
     'Content-Type': 'application/json',
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-    'Access-Control-Allow-Headers': 'Authorization, Content-Type',
+    ...corsHeaders(req),
   });
   res.end(body);
 }
@@ -92,7 +138,15 @@ export function parseRequestUrl(rawUrl) {
 
 async function serveStatic(req, res) {
   const url = parseRequestUrl(req.url);
-  let pathname = decodeURIComponent(url.pathname);
+  let pathname;
+  try {
+    pathname = decodeURIComponent(url.pathname);
+  } catch {
+    // %-encoding hỏng (vd /%E0%A4%A) là lỗi của client, không phải lỗi server.
+    res.writeHead(400, { 'Content-Type': 'text/plain' });
+    res.end('bad request');
+    return;
+  }
   if (pathname === '/') pathname = '/index.html';
   const resolved = path.resolve(PUBLIC_DIR, `.${pathname}`);
   const relativePath = path.relative(PUBLIC_DIR, resolved);
@@ -112,12 +166,13 @@ async function serveStatic(req, res) {
 }
 
 const server = http.createServer((req, res) => {
+  if (!isAllowedHostHeader(req.headers.host)) {
+    res.writeHead(403, { 'Content-Type': 'text/plain' });
+    res.end('forbidden host');
+    return;
+  }
   if (req.method === 'OPTIONS') {
-    res.writeHead(204, {
-      'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-      'Access-Control-Allow-Headers': 'Authorization, Content-Type',
-    });
+    res.writeHead(204, corsHeaders(req));
     res.end();
     return;
   }
@@ -147,7 +202,10 @@ const server = http.createServer((req, res) => {
     if (bodyBytes > MAX_BODY_BYTES) {
       bodyTooLarge = true;
       chunks.length = 0;
-      sendJson(res, 413, { error: 'body_too_large' });
+      // Đóng kết nối sau khi trả 413 để client ngừng đẩy phần body còn lại.
+      res.setHeader('Connection', 'close');
+      res.once('finish', () => req.destroy());
+      sendJson(res, 413, { error: 'body_too_large' }, req);
       return;
     }
     chunks.push(chunk);
@@ -164,15 +222,16 @@ const server = http.createServer((req, res) => {
         headers: req.headers,
         bodyText,
       });
-      sendJson(res, status, json);
+      sendJson(res, status, json, req);
     } catch (e) {
       console.error(e);
-      sendJson(res, 500, { error: 'server_error' });
+      sendJson(res, 500, { error: 'server_error' }, req);
     }
   });
   req.on('error', (e) => {
+    if (bodyTooLarge) return;
     console.error(e);
-    if (!res.writableEnded) sendJson(res, 500, { error: 'server_error' });
+    if (!res.headersSent) sendJson(res, 500, { error: 'server_error' }, req);
   });
 });
 
@@ -188,9 +247,10 @@ server.on('error', (error) => {
   process.exitCode = 1;
 });
 
-server.listen(PORT, () => {
+server.listen(PORT, HOST, () => {
   const ai = defaultAiRuntime.getStatus();
   console.log(`csv-ebay-studio dev server: http://localhost:${PORT}/`);
+  if (!LOOPBACK_HOSTS.has(HOST)) console.warn(`CẢNH BÁO: server đang nghe trên ${HOST} — máy khác trong mạng truy cập được API (không có đăng nhập).`);
   console.log(`Dữ liệu lưu tại: ${DATA_FILE}`);
   console.log(store.loadedAt
     ? `Đã tải lại ${store.listProducts().length} sản phẩm đã lưu (lưu lần cuối ${store.loadedAt}) — tắt Terminal mở lại vẫn còn.`

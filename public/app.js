@@ -57,22 +57,46 @@ async function api(path, init = {}) {
 const asArray = (v) => (Array.isArray(v) ? v : []);
 
 // ---- Tabs ---------------------------------------------------------------
-function activateTab(tabName) {
+// 3 tab thiết lập cũ (AI, cấu hình giá, khóa crawl) đã gộp vào "Cài đặt";
+// tên cũ vẫn nhận để nút data-go-tab="keys"... cuộn tới đúng mục.
+const SETTINGS_SECTIONS = { keys: 'settings-keys', ai: 'settings-ai', ebay: 'settings-ebay', config: 'settings-price' };
+function activateTab(requested) {
+  const anchor = SETTINGS_SECTIONS[requested] ?? null;
+  const tabName = anchor ? 'settings' : requested;
   if (!$(`tab-${tabName}`)) return;
   document.querySelectorAll('nav button[data-tab]').forEach((button) => {
-    button.setAttribute('aria-selected', String(button.dataset.tab === tabName));
+    if (button.dataset.tab === tabName) button.setAttribute('aria-current', 'page');
+    else button.removeAttribute('aria-current');
   });
   document.querySelectorAll('main > section').forEach((section) => { section.hidden = section.id !== `tab-${tabName}`; });
-  const labels = { browse: 'Kho sản phẩm', ai: 'AI & kết nối', config: 'Cấu hình giá', export: 'Xuất CSV eBay', keys: 'Khóa crawl', import: 'Nhập dữ liệu' };
-  if ($('activePageLabel')) $('activePageLabel').textContent = labels[tabName] ?? 'Tool lấy dữ liệu';
-  window.scrollTo(0, 0);
-  if (tabName === 'keys') loadKeys();
+  if ($('detail')) $('detail').hidden = true;
+  const target = anchor ? $(anchor) : null;
+  if (target) target.scrollIntoView({ block: 'start' });
+  else window.scrollTo(0, 0);
+  if (tabName === 'settings') loadKeys();
 }
 document.querySelectorAll('nav button[data-tab]').forEach((button) => {
   button.addEventListener('click', () => activateTab(button.dataset.tab));
 });
 document.querySelectorAll('[data-go-tab]').forEach((button) => {
   button.addEventListener('click', () => activateTab(button.dataset.goTab));
+});
+// Panel chi tiết dạng ngăn kéo bên phải: Esc để đóng, trả focus về nút đã mở.
+let detailOpener = null;
+function closeDetail() {
+  if (!$('detail') || $('detail').hidden) return;
+  $('detail').hidden = true;
+  if (detailOpener?.isConnected) detailOpener.focus();
+  detailOpener = null;
+}
+document.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape') closeDetail();
+});
+// Bấm ra ngoài ngăn kéo (không phải dòng/nút mở chi tiết) thì đóng.
+document.addEventListener('click', (event) => {
+  if (!event.target.isConnected) return;
+  if (event.target.closest('#detail, tr[data-id], [data-view-product]')) return;
+  closeDetail();
 });
 
 // ---- Bootstrap: GET /api/bootstrap --------------------------------------
@@ -81,7 +105,7 @@ async function loadBootstrap() {
     const data = await api('/api/bootstrap');
     const products = asArray(data.products ?? data);
     const config = data.config ?? data;
-    state.products = products;
+    replaceProductsState(products);
     state.config = {
       ...config,
       markupPct: Number(config.markupPct ?? 0.35),
@@ -169,6 +193,33 @@ function safeProductImage(value) {
   try { const url = new URL(value); return /^https?:$/.test(url.protocol) ? url.href : ''; }
   catch { return ''; }
 }
+// Link lấy từ dữ liệu crawl/nhập (source_url, ebayItemUrl): chỉ cho http(s),
+// chặn javascript:/data: — esc() chỉ chống thoát thuộc tính, không chặn scheme.
+const safeHref = safeProductImage;
+function linkOrText(href, text) {
+  const safe = safeHref(href);
+  return safe ? `<a href="${esc(safe)}" target="_blank" rel="noopener noreferrer">${esc(text)}</a>` : esc(text);
+}
+
+// Cập nhật sản phẩm TẠI CHỖ (giữ nguyên object): panel chi tiết và bảng AI
+// hàng loạt giữ tham chiếu tới object cũ để gửi `version` khi lưu. Thay bằng
+// object mới thì version ở đó bị cũ -> server trả 409 "người khác đã sửa"
+// dù chính mình vừa sửa ở tab khác của web.
+function updateProductInPlace(target, fresh) {
+  if (!target || !fresh || target === fresh) return fresh ?? target;
+  for (const key of Object.keys(target)) if (!(key in fresh)) delete target[key];
+  return Object.assign(target, fresh);
+}
+function upsertProductState(saved) {
+  const current = state.products.find((x) => x.id === saved?.id);
+  if (current) return updateProductInPlace(current, saved);
+  if (saved) state.products.push(saved);
+  return saved;
+}
+function replaceProductsState(fresh) {
+  const byId = new Map(state.products.map((x) => [x.id, x]));
+  state.products = asArray(fresh).map((f) => (byId.has(f?.id) ? updateProductInPlace(byId.get(f.id), f) : f));
+}
 
 // Browse controls filter the table only; bulk actions keep their whole-library scope.
 $('productSearch')?.addEventListener('input', renderBrowse);
@@ -221,7 +272,17 @@ function renderBrowse() {
   $('browseTable').querySelectorAll('img').forEach((image) => image.addEventListener('error', () => { image.hidden = true; }, { once: true }));
 }
 
-function showDetail(id) {
+// Vẽ lại panel chi tiết sau khi lưu mà không mất thông báo kết quả, và giữ
+// mục đang mở (vd "Số liệu eBay") thay vì thu gọn lại.
+function refreshDetailKeepingMessage(id, msgId, section) {
+  const text = $(msgId)?.textContent ?? '';
+  const cls = $(msgId)?.className ?? '';
+  renderBrowse();
+  showDetail(id, { open: section });
+  if ($(msgId)) { $(msgId).textContent = text; $(msgId).className = cls; }
+}
+
+function showDetail(id, { open = null } = {}) {
   const p = state.products.find((x) => x.id === id);
   if (!p) return;
   const eff = applyEdits(p, state.config);
@@ -234,27 +295,38 @@ function showDetail(id) {
     <td>${esc(v.sku ?? '')}</td><td>${esc(v.upc ?? '')}</td>
     <td>${esc(v.image ?? '')}</td>
   </tr>`).join('');
+  if (!$('detail').contains(document.activeElement)) detailOpener = document.activeElement;
   $('detail').hidden = false;
   // Danh sách "Đã cào được" (v9.3): 1 danh sách gọn duy nhất liệt kê đã
   // cào được những thông tin gì — trường nào chưa có thì ghi "chưa có",
   // không bịa.
-  const summaryHtml = `<h4>Đã cào được</h4><ul>${crawledSummaryItems(p, state.config).map((it) => `<li><strong>${esc(it.label)}:</strong> ${it.url ? `<a href="${esc(it.url)}" target="_blank" rel="noopener">${esc(it.value)}</a>` : esc(it.value)}</li>`).join('')}</ul>`;
+  const summaryHtml = `<details class="detail-section" open><summary>Đã cào được</summary><ul class="crawled-summary">${crawledSummaryItems(p, state.config).map((it) => `<li><strong>${esc(it.label)}:</strong> ${it.url ? linkOrText(it.url, it.value) : esc(it.value)}</li>`).join('')}</ul></details>`;
+  const stock = productStockSummary(p);
+  const thumb = safeProductImage(p.images?.[0]);
+  const fact = (label, value) => `<div><dt>${esc(label)}</dt><dd>${value}</dd></div>`;
   $('detail').innerHTML = `
-    <div class="detail-heading"><div><span class="eyebrow">Chi tiết sản phẩm</span><h3>${esc(eff.title)}</h3></div><button type="button" id="closeDetailBtn" class="button-secondary" aria-label="Đóng chi tiết sản phẩm">Đóng</button></div>
+    <div class="detail-heading">
+      ${thumb ? `<img class="detail-thumb" src="${esc(thumb)}" alt="" referrerpolicy="no-referrer">` : ''}
+      <div class="detail-title"><h3 id="detailTitle" tabindex="-1">${esc(eff.title)}</h3><p class="muted">${esc(p.source_site)} · ${linkOrText(p.source_url, 'Mở trang nguồn')}</p></div>
+      <button type="button" id="closeDetailBtn" aria-label="Đóng chi tiết sản phẩm (Esc)">Đóng</button>
+    </div>
+    <dl class="fact-grid">
+      ${fact('Giá nguồn', esc(sourceMoney(p.price, p.currency)) + (p.price_estimated ? ' <span class="warn">(ước tính)</span>' : ''))}
+      ${fact('Giá bán gợi ý', esc(sourceMoney(eff.sell_price, state.config.listingCurrency ?? 'USD')))}
+      ${fact('Tồn kho', `${stock.available}/${stock.total} biến thể còn hàng${p.truncated ? ' <span class="warn">(crawl bị cắt)</span>' : ''}`)}
+      ${fact('Thương hiệu', esc(p.brand ?? '—'))}
+      ${fact('Danh mục', esc(p.category ?? p.suggested_category ?? '—'))}
+      ${fact('Ảnh', String((p.images ?? []).length))}
+    </dl>
     ${summaryHtml}
-    <p class="muted">${esc(p.source_site)} · <a href="${esc(p.source_url ?? '')}" target="_blank" rel="noopener">${esc(p.source_url ?? '')}</a></p>
-    <p><strong>Giá nguồn:</strong> ${esc(sourceMoney(p.price, p.currency))} ·
-    <strong>Giá bán gợi ý:</strong> ${esc(sourceMoney(eff.sell_price, state.config.listingCurrency ?? 'USD'))} ·
-    <strong>Giá ước tính:</strong> ${p.price_estimated ? 'Có — kiểm lại trước khi xuất' : 'Không'} ·
-    <strong>Crawl bị cắt:</strong> ${p.truncated ? 'Có — chưa đủ biến thể' : 'Không'}</p>
-    <p><strong>Thương hiệu:</strong> ${esc(p.brand ?? '—')} · <strong>Danh mục:</strong> ${esc(p.category ?? p.suggested_category ?? '—')}
-    (gợi ý: ${esc(p.suggested_category ?? '—')}) · <strong>Department:</strong> ${esc(p.department ?? '—')} ·
-    <strong>Breadcrumb:</strong> ${esc((p.breadcrumb ?? []).join(' › '))} · <strong>UPC:</strong> ${esc(p.upc ?? '—')}</p>
-    <p><strong>Tuỳ chọn:</strong> ${esc(names.join(', ') || '—')} (${esc(variantOptionSummary(p) || '—')})</p>
-    <p><strong>Thuộc tính:</strong> ${esc(Object.entries(p.attributes ?? {}).filter(([, v]) => v).map(([k, v]) => `${k}=${v}`).join('; ') || '—')}</p>
-    <p><strong>Mô tả:</strong> ${esc(p.description ?? '—')}</p>
-    <p class="muted">Ảnh: ${(p.images ?? []).length} · Biến thể: ${productStockSummary(p).total} (còn hàng ${productStockSummary(p).available}) · Version: ${p.version ?? 1} · Crawl: ${esc(p.crawled_at ?? '')}</p>
-    <table><thead><tr><th>#</th>${names.map((n) => `<th>${esc(n)}</th>`).join('')}<th>Giá</th><th>Giá gốc</th><th>Tồn</th><th>SKU</th><th>UPC</th><th>Ảnh variant</th></tr></thead><tbody>${variantRows || '<tr><td colspan="99">Không có biến thể.</td></tr>'}</tbody></table>
+    <details class="detail-section"><summary>Mô tả &amp; thuộc tính</summary>
+      <p><strong>Mô tả:</strong> ${esc(p.description ?? '—')}</p>
+      <p><strong>Thuộc tính:</strong> ${esc(Object.entries(p.attributes ?? {}).filter(([, v]) => v).map(([k, v]) => `${k}=${v}`).join('; ') || '—')}</p>
+      <p class="muted">Tuỳ chọn: ${esc(names.join(', ') || '—')} · Department: ${esc(p.department ?? '—')} · Breadcrumb: ${esc((p.breadcrumb ?? []).join(' › ') || '—')} · UPC: ${esc(p.upc ?? '—')} · Version: ${p.version ?? 1} · Crawl: ${esc(p.crawled_at ?? '')}</p>
+    </details>
+    <details class="detail-section"><summary>Biến thể (${stock.total})</summary>
+      <div class="table-scroll"><table><thead><tr><th>#</th>${names.map((n) => `<th>${esc(n)}</th>`).join('')}<th>Giá</th><th>Giá gốc</th><th>Tồn</th><th>SKU</th><th>UPC</th><th>Ảnh variant</th></tr></thead><tbody>${variantRows || '<tr><td colspan="99">Không có biến thể.</td></tr>'}</tbody></table></div>
+    </details>
     <form id="editForm">
       <h4>Chỉnh sửa thông tin</h4>
       <label for="editTitle">Tiêu đề</label>
@@ -268,20 +340,21 @@ function showDetail(id) {
     </form>
     <p id="editMsg" role="status"></p>
     <div id="aiSuggestBox"></div>
+    <details class="detail-section"${open === 'ebay' ? ' open' : ''}><summary>Số liệu eBay tham khảo</summary>
     <form id="ebayForm">
-      <h4>Số liệu eBay (tham khảo — không vào file CSV upload)</h4>
-      <p class="muted">Đã bán: ${p.ebaySold != null ? `${esc(p.ebaySold)} (ước tính theo eBay, tổng cả listing)` : 'chưa có — tool tự tìm listing khớp sau khi crawl AI, hoặc bấm "Tìm lại" bên dưới'} · Người theo dõi: ${p.ebayWatchers != null ? esc(p.ebayWatchers) : '—'} · Listing khớp: ${p.ebayItemUrl ? `<a href="${esc(p.ebayItemUrl)}" target="_blank" rel="noopener">${esc(p.ebayItemTitle ?? p.ebayItemId ?? '')}</a>${p.ebayMatchScore != null ? ` (khớp ${Number(p.ebayMatchScore).toFixed(2)})` : ''}` : 'chưa khớp'}</p>
-      <label for="ebayLink">Link listing eBay (tùy chọn — chỉ điền khi muốn sửa listing đã khớp tự động)</label>
+      <p class="muted">Đã bán: ${p.ebaySold != null ? `${esc(p.ebaySold)} (ước tính, tổng cả listing)` : 'chưa có'} · Người theo dõi: ${p.ebayWatchers != null ? esc(p.ebayWatchers) : '—'} · Listing khớp: ${p.ebayItemUrl ? `${linkOrText(p.ebayItemUrl, p.ebayItemTitle ?? p.ebayItemId ?? '')}${p.ebayMatchScore != null ? ` (khớp ${Number(p.ebayMatchScore).toFixed(2)})` : ''}` : 'chưa khớp'}</p>
+      <label for="ebayLink">Link listing eBay (chỉ điền khi muốn sửa listing khớp sai)</label>
       <input id="ebayLink" name="ebayLink" type="text" value="${esc(p.ebayItemId ?? '')}" placeholder="https://www.ebay.com/itm/... hoặc 123456789012" />
       <label for="ebayWatchers">Số người theo dõi (sửa tay khi cần)</label>
       <input id="ebayWatchers" name="ebayWatchers" type="number" step="1" min="0" value="${esc(p.ebayWatchers ?? '')}" />
-      <p class="muted">Tool tự tìm listing eBay khớp qua Browse API (số đã bán là ước tính của eBay, tổng cả listing, không chia màu/size). Không cần dán gì thêm — form này chỉ để sửa khi khớp sai.</p>
       <button type="submit">Lưu số liệu eBay</button>
       <button type="button" id="ebayRefindBtn">Tìm lại</button>
     </form>
-    <p id="ebayMsg" role="status"></p>`;
-  $('detail').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-  $('closeDetailBtn').addEventListener('click', () => { $('detail').hidden = true; });
+    <p id="ebayMsg" role="status"></p>
+    </details>`;
+  $('detail').querySelector('.detail-thumb')?.addEventListener('error', (event) => { event.target.hidden = true; }, { once: true });
+  $('detailTitle')?.focus({ preventScroll: true });
+  $('closeDetailBtn').addEventListener('click', closeDetail);
   $('editForm').addEventListener('submit', async (e) => {
     e.preventDefault();
     const fd = new FormData(e.target);
@@ -371,8 +444,7 @@ function showDetail(id) {
         msg.textContent = 'Đã lưu số liệu eBay.';
         msg.className = 'ok';
       }
-      renderBrowse();
-      showDetail(p.id);
+      refreshDetailKeepingMessage(p.id, 'ebayMsg', 'ebay');
     } catch (err) {
       msg.textContent = err.status === 409
         ? 'Sản phẩm đã bị người khác sửa (version lệch, HTTP 409). Tải lại trang rồi sửa lại.'
@@ -393,8 +465,7 @@ function showDetail(id) {
         ? `Đã khớp "${enr.itemTitle ?? ''}" — đã bán ~${enr.sold ?? '—'}, ${enr.watchers ?? '—'} người theo dõi (khớp ${Number(enr.score ?? 0).toFixed(2)}).`
         : (enr.warning ?? 'Không tìm thấy listing eBay khớp.');
       msg.className = enr.matched ? 'ok' : 'error';
-      renderBrowse();
-      showDetail(p.id);
+      refreshDetailKeepingMessage(p.id, 'ebayMsg', 'ebay');
     } catch (err) {
       msg.textContent = `Không tìm được: ${err.message}`;
       msg.className = 'error';
@@ -634,7 +705,7 @@ function renderGroupList() {
   $('groupList').innerHTML = groups.length
     ? `<ul>${groups.map((g) => `<li><strong>${esc(g.label)}</strong> — ${g.products.length} sản phẩm` +
       (g.categoryId ? ` · category eBay ${esc(g.categoryId)}${g.resolvedCategory?.verifiedFromEbay ? ` (${esc(g.resolvedCategory.categoryName ?? '')} — đã xác minh từ eBay)` : ''}` : ' · chưa có categoryId') +
-      ` · file gợi ý: <code>${g.categoryId ? `ebay-${g.categoryId}-${esc(g.key)}.csv` : `ebay-DRAFT-${esc(g.key)}.csv (nháp — chưa upload được)`}</code></li>`).join('')}</ul>`
+      ` · file gợi ý: <code>${g.categoryId ? `ebay-${esc(g.categoryId)}-${esc(g.key)}.csv` : `ebay-DRAFT-${esc(g.key)}.csv (nháp — chưa upload được)`}</code></li>`).join('')}</ul>`
     : '<p class="muted">Chưa có sản phẩm nào để nhóm.</p>';
   return groups;
 }
@@ -667,7 +738,7 @@ $('categoryTemplateForm').addEventListener('submit', async (event) => {
     const { product: saved } = await api(`/api/products/${encodeURIComponent(product.id)}`, {
       method: 'PUT', body: JSON.stringify({ version: product.version, edits }),
     });
-    state.products = state.products.map((p) => p.id === saved.id ? saved : p);
+    upsertProductState(saved);
     const template = await loadEmbeddedTemplate();
     if (revision !== categoryPreviewRevision) return;
     const groups = [{ key: `cat-${category.categoryId}`, label: category.categoryName, categoryId: category.categoryId,
@@ -799,7 +870,7 @@ $('ebayEnrichAllBtn').addEventListener('click', async () => {
     const total = (result.results ?? []).length;
     // Tải lại sản phẩm từ server để bảng Duyệt hiện số liệu mới.
     const fresh = await api('/api/products');
-    state.products = asArray(fresh.products ?? fresh);
+    replaceProductsState(fresh.products ?? fresh);
     renderBrowse();
     renderGroupList();
     status.textContent = `Đã tra xong ${total} sản phẩm: ${matched} sản phẩm khớp listing eBay, ${total - matched} sản phẩm chưa khớp. Mở Chi tiết để xem số liệu và bấm "Tìm lại" nếu cần.` +
@@ -1049,7 +1120,8 @@ $('ebayConfigForm').addEventListener('submit', async (event) => {
 $('ebayClearBtn').addEventListener('click', async () => {
   const msg = $('ebayConfigMsg');
   try {
-    await fetch('/api/ebay/config', { method: 'DELETE' });
+    const res = await fetch('/api/ebay/config', { method: 'DELETE' });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
     await loadEbayStatus();
     msg.textContent = 'Đã xoá khóa eBay dán trong web. Nếu khóa còn trong .env thì server vẫn dùng khóa đó.';
     msg.className = 'ok';
@@ -1247,7 +1319,7 @@ function renderGroupSummary() {
       const file = files.find((f) => f.groupKey === g.key);
       const codeCell = g.resolvedCategory?.verifiedFromEbay
         ? `${esc(g.categoryId)} — <span class="ok">tự áp từ eBay</span><br>${esc(g.resolvedCategory.categoryPath ?? g.resolvedCategory.categoryName ?? '')}`
-        : g.categoryId === template?.categoryId
+        : template?.categoryId != null && g.categoryId === template.categoryId
           ? `${esc(template.categoryId)} — đã có template gối`
           : g.key === 'chua-phan-loai'
             ? '—'

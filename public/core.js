@@ -606,9 +606,21 @@ export function applyEdits(product, config = {}) {
 
 // ---- CSV -------------------------------------------------------------------
 
-export function csvEscape(value) {
-  if (value == null) return '';
+/** Ô CSV mà Excel/Sheets sẽ hiểu là công thức (CSV/formula injection):
+ *  bắt đầu bằng = + - @ tab hoặc CR. Số thuần (vd -5, +1.5) không tính. */
+export function looksLikeCsvFormula(value) {
+  if (value == null) return false;
   const s = String(value);
+  return /^[=+\-@\t\r]/.test(s) && !/^[+-]?\d+(?:[.,]\d+)?$/.test(s.trim());
+}
+
+/** neutralizeFormulas: thêm dấu ' trước ô dạng công thức — CHỈ dùng cho file
+ *  xem bằng Excel (research). File upload Seller Hub giữ nguyên dữ liệu và
+ *  được cảnh báo trong validateEbayTemplateProducts thay vì sửa ngầm. */
+export function csvEscape(value, { neutralizeFormulas = false } = {}) {
+  if (value == null) return '';
+  let s = String(value);
+  if (neutralizeFormulas && looksLikeCsvFormula(s)) s = `'${s}`;
   return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
 
@@ -676,7 +688,7 @@ export function buildCsv(products, config = {}) {
       ]);
     });
   }
-  return CSV_UTF8_BOM + rows.map((r) => r.map(csvEscape).join(',')).join('\r\n') + '\r\n';
+  return CSV_UTF8_BOM + rows.map((r) => r.map((v) => csvEscape(v)).join(',')).join('\r\n') + '\r\n';
 }
 
 // ---- eBay File Exchange template -----------------------------------------
@@ -735,8 +747,8 @@ export function parseCsvText(text) {
  *  Seller Hub. parseCsvText đã bỏ BOM khi đọc lại nên parse vẫn đúng. */
 export const CSV_UTF8_BOM = '\uFEFF';
 
-export function serializeCsvRows(rows) {
-  return CSV_UTF8_BOM + rows.map((r) => r.map(csvEscape).join(',')).join('\r\n') + '\r\n';
+export function serializeCsvRows(rows, opts = {}) {
+  return CSV_UTF8_BOM + rows.map((r) => r.map((v) => csvEscape(v, opts)).join(',')).join('\r\n') + '\r\n';
 }
 
 /**
@@ -1221,12 +1233,15 @@ export function buildGroupedEbayCsvs(products, template, config = {}, groups = n
     // xuất để mỗi sản phẩm chỉ 1 dòng, không cần xoá dữ liệu tay.
     const gProducts = listingProductsForGroup(g, template, config, skipped);
     if (!gProducts.length) continue;
-    if (g.resolvedCategory?.aspectSchemaAvailable === false && g.categoryId !== template.categoryId) {
+    // Template thiếu dòng "For categoryId:" có categoryId null; nhóm chưa
+    // có mã cũng null — không được coi null === null là "cùng danh mục".
+    const sameAsTemplate = template.categoryId != null && g.categoryId === template.categoryId;
+    if (g.resolvedCategory?.aspectSchemaAvailable === false && !sameAsTemplate) {
       skipped.push({ key: g.key, label: g.label, productCount: gProducts.length,
         reason: `Danh mục ${g.categoryId} mới có mã đã lưu, chưa có danh sách trường. Tra Category ID lại trước khi xuất.` });
       continue;
     }
-    if (g.categoryId === template.categoryId) {
+    if (sameAsTemplate) {
       const resolved = g.resolvedCategory?.aspectSchemaAvailable === false ? null : g.resolvedCategory;
       const aspectNames = [...normalizeAspectEntries(resolved?.requiredAspects), ...normalizeAspectEntries(resolved?.recommendedAspects)].map((a) => a.name);
       const csv = buildEbayTemplateCsv(gProducts, template, config, resolved ? { resolvedCategory: { ...resolved, aspectNames } } : {});
@@ -1320,6 +1335,13 @@ export function validateEbayTemplateProducts(products, template, config = {}, re
       const issue = (field, code, message) => issues.push({ productId: product.id, title: product.edits?.title ?? product.title,
         sku: variant.sku ?? read(row, 'CustomLabel'), variantIndex: index, field, code, message });
       if (!row) { issue('Row', 'missing_row', 'Không tạo được dòng CSV cho biến thể.'); continue; }
+      // Ô bắt đầu bằng = + - @ bị Excel chạy như công thức khi seller mở file
+      // để kiểm tra. Không tự sửa dữ liệu upload — báo để seller sửa nội dung.
+      for (let col = 0; col < headers.length; col++) {
+        if (!looksLikeCsvFormula(row[col])) continue;
+        const name = String(headers[col] ?? '').replace(/^\*/, '').replace(/\(.*$/, '');
+        issue(name, 'csv_formula_like', `Ô ${name} bắt đầu bằng "${String(row[col]).charAt(0)}" — Excel có thể chạy như công thức. Sửa nội dung trước khi mở file bằng Excel hoặc upload.`);
+      }
       const priceText = read(row, 'StartPrice');
       if (!priceText || !Number.isFinite(Number(priceText)) || Number(priceText) <= 0) {
         let priceError = null;
@@ -1561,7 +1583,9 @@ export function researchRowForProduct(p, config = {}) {
 export function buildResearchCsv(products, config = {}) {
   const rows = [RESEARCH_CSV_HEADERS];
   for (const p of products ?? []) rows.push(researchRowForProduct(p, config));
-  return serializeCsvRows(rows);
+  // File research chỉ để mở bằng Excel: tiêu đề listing eBay do seller khác
+  // đặt (ebayItemTitle) có thể là "=HYPERLINK(...)" -> vô hiệu hoá công thức.
+  return serializeCsvRows(rows, { neutralizeFormulas: true });
 }
 
 /**
@@ -2617,7 +2641,7 @@ if (typeof window !== 'undefined') {
     MAX_VARIANTS, MAX_TITLE_LENGTH, EBAY_TYPES_20563, AI_SPECIFIC_ASPECTS, SITE_RANGES, WOMEN_ONLY_SITES, CATEGORY_KEYWORDS,
     normalizeSite, hashProductId, truncateTitle, suggestCategory, validatePrice, calcSellPrice, listingPriceForVariant,
     normalizeVariant, optionNamesFor, variantRelationshipDetails, normalizeRecord, parseImport,
-    mergeProducts, dedupeProductsById, normalizeProductUrl, applyEdits, csvEscape, CSV_HEADERS, CSV_UTF8_BOM, buildCsv,
+    mergeProducts, dedupeProductsById, normalizeProductUrl, applyEdits, csvEscape, looksLikeCsvFormula, CSV_HEADERS, CSV_UTF8_BOM, buildCsv,
     parseCsvText, serializeCsvRows, parseEbayTemplate, THEME_KEYWORDS, slugifyTheme,
     groupProductsByTheme, parseSohoDimensions, parseSohoWeight,
     parseBulkList, parseSheetCsv, parseMoneyCell, sanitizeEbayDescription, templateColumnIndex,
@@ -2636,7 +2660,7 @@ export default {
   MAX_VARIANTS, MAX_TITLE_LENGTH, EBAY_TYPES_20563, AI_SPECIFIC_ASPECTS, SITE_RANGES, WOMEN_ONLY_SITES, CATEGORY_KEYWORDS,
   normalizeSite, hashProductId, truncateTitle, suggestCategory, validatePrice, calcSellPrice, listingPriceForVariant,
   normalizeVariant, optionNamesFor, variantRelationshipDetails, normalizeRecord, parseImport,
-  mergeProducts, dedupeProductsById, normalizeProductUrl, applyEdits, csvEscape, CSV_HEADERS, CSV_UTF8_BOM, buildCsv,
+  mergeProducts, dedupeProductsById, normalizeProductUrl, applyEdits, csvEscape, looksLikeCsvFormula, CSV_HEADERS, CSV_UTF8_BOM, buildCsv,
   parseCsvText, serializeCsvRows, parseEbayTemplate, THEME_KEYWORDS, slugifyTheme,
   groupProductsByTheme, parseSohoDimensions, parseSohoWeight,
   parseBulkList, parseSheetCsv, parseMoneyCell, sanitizeEbayDescription, templateColumnIndex,

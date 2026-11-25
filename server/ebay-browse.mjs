@@ -60,13 +60,26 @@ export const EBAY_BROWSE_SEARCH_LIMIT = 10;
 export const EBAY_MATCH_MIN_SCORE = 0.5;
 /** Giãn giữa các sản phẩm khi enrich hàng loạt (Browse API ~5.000 calls/ngày). */
 export const EBAY_BROWSE_BULK_DELAY_MS = 200;
+/** Số đã bán / người theo dõi thay đổi theo thời gian: cache Browse chỉ giữ
+ *  10 phút (trước đây giữ suốt đời process, "Tìm lại" luôn trả số cũ). */
+export const EBAY_BROWSE_CACHE_TTL_MS = 10 * 60 * 1000;
 
 function cachePut(map, key, value) {
   if (map.size >= EBAY_CACHE_MAX_ENTRIES) {
     const first = map.keys().next().value;
     if (first !== undefined) map.delete(first);
   }
-  map.set(key, value);
+  map.set(key, { value, at: Date.now() });
+}
+
+function cacheGet(map, key, now = Date.now()) {
+  const hit = map.get(key);
+  if (!hit) return null;
+  if (now - hit.at > EBAY_BROWSE_CACHE_TTL_MS) {
+    map.delete(key);
+    return null;
+  }
+  return hit.value;
 }
 
 /** Từ dừng khi tách tiêu đề thành từ khoá (không mang nghĩa phân biệt). */
@@ -201,16 +214,24 @@ export class EbayBrowseRuntime {
     return res.json().catch(() => ({}));
   }
 
+  /** Phạm vi cache: môi trường + marketplace. Đổi sandbox↔production hoặc
+   *  marketplace qua /api/ebay/config thì không dùng lại kết quả cũ. */
+  cacheScope() {
+    const cfg = this.taxonomy.getEffectiveConfig?.() ?? {};
+    return `${cfg.environment ?? ''}|${cfg.marketplaceId ?? ''}`;
+  }
+
   /**
    * Tìm listing eBay theo tên sản phẩm (item_summary/search).
    * Trả [{itemId, legacyItemId, title, price: {value, currency}, itemWebUrl}]
    * (tối đa limit, mặc định 10). Không có kết quả thì [] — không lỗi.
+   * fresh: bỏ qua cache (seller bấm "Tìm lại").
    */
-  async searchItemsByTitle(title, { limit = EBAY_BROWSE_SEARCH_LIMIT } = {}) {
+  async searchItemsByTitle(title, { limit = EBAY_BROWSE_SEARCH_LIMIT, fresh = false } = {}) {
     const q = buildSearchQuery(title);
     if (!q) return [];
-    const cacheKey = q.toLowerCase();
-    const cached = this.searchCache.get(cacheKey);
+    const cacheKey = `${this.cacheScope()}|${q.toLowerCase()}`;
+    const cached = fresh ? null : cacheGet(this.searchCache, cacheKey);
     if (cached) return cached.slice(0, limit);
     const data = await this.browseGet(`${EBAY_BROWSE_BASE_PATH}/item_summary/search?q=${encodeURIComponent(q)}&limit=${encodeURIComponent(limit)}`);
     const raw = Array.isArray(data?.itemSummaries) ? data.itemSummaries : [];
@@ -242,14 +263,15 @@ export class EbayBrowseRuntime {
    * estimatedAvailabilities), không phải số chính xác tuyệt đối; không có
    * thì null. watchCount không có thì null.
    */
-  async getItemDetails(itemId) {
+  async getItemDetails(itemId, { fresh = false } = {}) {
     const id = String(itemId ?? '').trim();
     if (!id) throw new EbayTaxonomyError('item_required', 'Cần mã item eBay để lấy chi tiết listing.');
-    const cached = this.itemCache.get(id);
+    const key = `${this.cacheScope()}|${id}`;
+    const cached = fresh ? null : cacheGet(this.itemCache, key);
     if (cached) return cached;
     const data = await this.browseGet(`${EBAY_BROWSE_BASE_PATH}/item/${encodeURIComponent(id)}`);
     const details = parseBrowseItem(data, id);
-    cachePut(this.itemCache, id, details);
+    cachePut(this.itemCache, key, details);
     return details;
   }
 
@@ -258,15 +280,16 @@ export class EbayBrowseRuntime {
    * get_item_by_legacy_id — dùng khi seller sửa tay mã item trong form
    * chi tiết sản phẩm. Trả cùng shape với getItemDetails.
    */
-  async getItemByLegacyId(legacyItemId) {
+  async getItemByLegacyId(legacyItemId, { fresh = false } = {}) {
     const id = String(legacyItemId ?? '').trim();
     if (!id) throw new EbayTaxonomyError('item_required', 'Cần mã số item eBay để lấy chi tiết listing.');
-    const cached = this.itemCache.get(`legacy:${id}`);
+    const scope = this.cacheScope();
+    const cached = fresh ? null : cacheGet(this.itemCache, `${scope}|legacy:${id}`);
     if (cached) return cached;
     const data = await this.browseGet(`${EBAY_BROWSE_BASE_PATH}/item/get_item_by_legacy_id?legacy_item_id=${encodeURIComponent(id)}`);
     const details = parseBrowseItem(data, data?.itemId ?? id);
-    cachePut(this.itemCache, `legacy:${id}`, details);
-    if (details.itemId) cachePut(this.itemCache, details.itemId, details);
+    cachePut(this.itemCache, `${scope}|legacy:${id}`, details);
+    if (details.itemId) cachePut(this.itemCache, `${scope}|${details.itemId}`, details);
     return details;
   }
 
@@ -281,8 +304,9 @@ export class EbayBrowseRuntime {
    * - forceItemId: bỏ qua bước search, lấy thẳng listing đó (seller sửa
    *   tay mã item trong form chi tiết) — mã số thì dùng getItemByLegacyId,
    *   mã REST (v1|...|0) thì dùng getItemDetails; điểm khớp = 1.
+   * - fresh: bỏ qua cache, tra lại từ eBay (nút "Tìm lại" / sửa tay).
    */
-  async enrichProduct(product, { forceItemId } = {}) {
+  async enrichProduct(product, { forceItemId, fresh = false } = {}) {
     const source = 'browse-api';
     const cfg = this.taxonomy.getEffectiveConfig();
     if (!cfg.appId || !cfg.certId) {
@@ -296,8 +320,8 @@ export class EbayBrowseRuntime {
       const forced = String(forceItemId ?? '').trim();
       if (forced) {
         const details = /^\d{9,}$/.test(forced)
-          ? await this.getItemByLegacyId(forced)
-          : await this.getItemDetails(forced);
+          ? await this.getItemByLegacyId(forced, { fresh })
+          : await this.getItemDetails(forced, { fresh });
         return {
           matched: true, score: 1, source,
           itemId: details.itemId,
@@ -315,7 +339,7 @@ export class EbayBrowseRuntime {
       if (!title) {
         return { matched: false, source, warning: 'Sản phẩm chưa có tiêu đề nên không tìm được listing eBay khớp.' };
       }
-      const candidates = await this.searchItemsByTitle(title);
+      const candidates = await this.searchItemsByTitle(title, { fresh });
       if (!candidates.length) {
         return { matched: false, source, warning: `Không tìm thấy listing eBay nào cho "${title}" — số đã bán / người theo dõi để trống, bấm "Tìm lại" sau khi đổi tên.` };
       }
@@ -331,7 +355,7 @@ export class EbayBrowseRuntime {
           warning: `Tìm thấy ${candidates.length} listing nhưng không có listing nào khớp đủ (điểm cao nhất ${bestScore.toFixed(2)} < ${EBAY_MATCH_MIN_SCORE.toFixed(2)}) — số đã bán / người theo dõi để trống, không gán bừa.`,
         };
       }
-      const details = await this.getItemDetails(best.itemId);
+      const details = await this.getItemDetails(best.itemId, { fresh });
       return {
         matched: true, score: bestScore, source,
         itemId: details.itemId,

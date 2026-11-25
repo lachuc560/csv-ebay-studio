@@ -274,3 +274,42 @@ test('v9.1 (f): không có chuỗi watchcount.com trong code (server/public/exte
   for (const r of roots) walk(path.join(root, r));
   assert.deepEqual(bad, [], 'code không được chứa domain watchcount (không fetch, không cào)');
 });
+
+// ---- Cache Browse (25/11/2026): TTL, tách theo marketplace, "Tìm lại" tra lại eBay ----
+
+test('cache Browse: cùng marketplace dùng cache; fresh và đổi marketplace thì gọi lại eBay', async () => {
+  const fetchFn = makeBrowseFetch();
+  const browse = makeBrowseRuntime(fetchFn);
+  const product = makeProduct({ id: 'daxton-square-cushion-olive', title: 'Soho Home Daxton Square Cushion Olive', price: 395 });
+  await browse.enrichProduct(product);
+  await browse.enrichProduct(product);
+  assert.equal(fetchFn.searchCalls().length, 1, 'lần 2 dùng cache');
+  await browse.enrichProduct(product, { fresh: true });
+  assert.equal(fetchFn.searchCalls().length, 2, 'fresh (nút Tìm lại) bỏ qua cache');
+  browse.taxonomy.memory.marketplaceId = 'EBAY_GB';
+  await browse.enrichProduct(product);
+  assert.equal(fetchFn.searchCalls().length, 3, 'đổi marketplace không dùng kết quả của EBAY_US');
+});
+
+test('cache Browse: hết hạn sau EBAY_BROWSE_CACHE_TTL_MS', async () => {
+  const { EBAY_BROWSE_CACHE_TTL_MS } = await import('../server/ebay-browse.mjs');
+  const fetchFn = makeBrowseFetch();
+  const browse = makeBrowseRuntime(fetchFn);
+  await browse.searchItemsByTitle('Soho Home Daxton Square Cushion');
+  for (const entry of browse.searchCache.values()) entry.at -= EBAY_BROWSE_CACHE_TTL_MS + 1;
+  await browse.searchItemsByTitle('Soho Home Daxton Square Cushion');
+  assert.equal(fetchFn.searchCalls().length, 2, 'cache quá hạn thì tra lại');
+});
+
+test('POST /api/ebay/enrich ("Tìm lại") luôn tra lại eBay, không trả số cũ trong cache', async () => {
+  const fetchFn = makeBrowseFetch();
+  const browse = makeBrowseRuntime(fetchFn);
+  const store = new MemoryStore();
+  const product = makeProduct({ id: 'daxton-square-cushion-olive', title: 'Soho Home Daxton Square Cushion Olive', price: 395 });
+  store.putProduct(product);
+  for (let i = 0; i < 2; i++) {
+    const res = await handleRequest(store, { method: 'POST', path: '/api/ebay/enrich', bodyText: JSON.stringify({ productId: product.id }) }, { browseRuntime: browse });
+    assert.equal(res.status, 200);
+  }
+  assert.equal(fetchFn.searchCalls().length, 2);
+});

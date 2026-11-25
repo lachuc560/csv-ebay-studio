@@ -10,7 +10,7 @@ Giao diện **Tool lấy dữ liệu** có thanh điều hướng, bảng sản 
 
 1. Chạy `npm test`, rồi `npm run dev` trong thư mục dự án.
 2. Mở `http://localhost:8787`. Tạo khóa crawl trong tab **Khóa crawl** nếu chưa có.
-3. Cài/reload extension **1.3.7** từ thư mục `extension-v2/`. Bản ZIP nằm ở `dist/extension-v1.3.7.zip`. Nếu đã cài, mở `chrome://extensions`, bấm biểu tượng tải lại trên thẻ **CSV Studio Crawler**, rồi tải lại tab sản phẩm. Không cần cài thêm extension mới.
+3. Cài/reload extension **1.4.0** từ thư mục `extension-v2/`. Bản ZIP nằm ở `dist/extension-v1.4.0.zip`. Nếu đã cài, mở `chrome://extensions`, bấm biểu tượng tải lại trên thẻ **CSV Studio Crawler**, rồi tải lại tab sản phẩm. Từ 1.4.0, bấm icon extension sẽ mở **bảng bên cạnh** (side panel): bảng giữ nguyên khi chuyển tab, tự đổi theo trang đang xem; lần đầu crawl một website Chrome hỏi cho phép đọc trang đó (cần Chrome 116+).
 4. Mở trang sản phẩm, bấm **Crawl AI trang này**. Thiếu key AI vẫn đọc theo luật từ dữ liệu trang; cảnh báo cho biết phần chưa xác minh.
 5. Trong tool, cấu hình eBay Developers **App ID + Cert ID** ở mục **AI & kết nối → eBay Taxonomy**, hoặc đặt `EBAY_APP_ID`, `EBAY_CERT_ID` trong `.env` rồi khởi động lại server. Không đặt key vào extension hoặc mã nguồn.
 6. Vào **Xuất CSV eBay → Điền template theo danh mục**, chọn sản phẩm đã crawl, nhập mã danh mục và bấm **Tra mã & tải CSV**.
@@ -22,6 +22,14 @@ Nếu chưa biết Category ID, luồng **AI phân loại + xuất CSV theo nhó
 
 ## Đã sửa trong lần cập nhật này
 
+- **Giao diện gọn (25/11/2026):** bỏ khẩu hiệu, dải 3 bước, thẻ hướng dẫn/avatar ở sidebar, footer và các ghi chú lặp lại; 3 mục AI & kết nối, Cấu hình giá, Khóa crawl gộp thành trang **Cài đặt** (có nút nhảy nhanh tới từng mục). Chi tiết sản phẩm mở dạng ngăn kéo bên phải (Esc để đóng), thông tin chính hiện ở đầu, phần dài thu gọn được.
+- **Extension 1.4.0:** mở dạng bảng bên cạnh thay cho popup — không tự tắt khi chuyển trang; kết quả crawl giữ theo từng trang; crawl đang chạy vẫn hoàn tất khi đã chuyển tab.
+- **Bảo mật & độ bền (25/11/2026):** dev server chỉ nghe `127.0.0.1` (đặt `HOST=0.0.0.0` nếu thật sự cần mở cho máy khác), từ chối Host lạ (chống DNS rebinding), CORS chỉ cho extension Chrome và localhost thay vì `*`; URL `%` hỏng trả 400 thay vì 500. Key AI trong `.env` không còn bị gửi tới `baseUrl` dán trong web. Mirror ảnh R2 chặn URL nội bộ/metadata, SVG, redirect vào mạng nội bộ và ảnh > 20MB ngay khi đọc. `stripHtmlToText` chạy tuyến tính, giãn cách gọi AI đúng khi có request đồng thời, giới hạn `productIds` kiểm tra trước vòng lặp. Web: escape `categoryId`, link chỉ nhận http(s), template thiếu categoryId không nuốt nhóm chưa có mã. `npm run package` giờ build bản extension hiện hành; ZIP có `manifest.json` ở gốc. Kiểm thử: `tests/security-hardening.test.mjs`.
+- **Extension 1.3.8:** bỏ quyền `tabs` (activeTab đủ dùng); request có timeout (ping 15 giây, Crawl AI 2 phút); lỗi JSON/lỗi Chrome hiện thông báo tiếng Việt; nút Lưu không còn kẹt khi lỗi và chỉ lưu cấu hình đã kết nối được; trang lưu local lúc chưa cấu hình (tối đa 20) được tự gửi vào tool sau khi bấm Lưu thành công.
+- **Lưu file local:** dev server gom các thay đổi trong 250ms thành 1 lần ghi (ingest hàng loạt không ghi lại cả file hàng trăm lần) và ghi nốt khi tắt bằng Ctrl+C; đổi tên file tạm có thử lại khi Windows báo EPERM/EBUSY.
+- **CSV:** file research (chỉ để xem) tự thêm `'` trước ô dạng công thức (`=`, `+`, `-`, `@`); file upload Seller Hub giữ nguyên dữ liệu nhưng báo `csv_formula_like` trong danh sách cần kiểm tra.
+- **Web:** cập nhật sản phẩm tại chỗ nên panel chi tiết đang mở không còn báo nhầm "người khác đã sửa" (409) sau khi chính mình tra mã/tìm listing ở tab khác.
+- **eBay Browse:** cache 10 phút, tách theo môi trường + marketplace; nút **Tìm lại** luôn tra lại eBay.
 - Soho Home: mở **Details & Dimensions** và đợi tối đa 2 giây cho nội dung tải; đọc mô tả/thông số trong khối chi tiết, loại nút giao hàng/giỏ hàng và ảnh sản phẩm liên quan. Giữ màu khớp SKU và nhận trạng thái discontinued. Chưa đọc được thông số thì để trống.
 - Gemini: khi model trả 404, tra ListModels và thử tối đa hai model Flash hỗ trợ tạo nội dung mà tài khoản được trả về. Không dùng model 2.0 cố định làm dự phòng. Cảnh báo phân biệt lỗi AI với chưa cấu hình khóa.
 - eBay: dùng marketplace `EBAY_US`, tự chuẩn hóa cấu hình cũ `EBAY-US` cho Taxonomy và Browse.
@@ -76,7 +84,7 @@ Tham chiếu chính thức: [eBay Taxonomy OpenAPI](https://developer.ebay.com/a
 
 ## Kiểm chứng và giới hạn
 
-Toàn bộ **360/360 kiểm thử đạt**, gồm kiểm thử giá trống, sự kiện tải CSV, tìm kiếm, bộ lọc và trạng thái dữ liệu; extension giữ bản 1.3.7. Đã kiểm tra trình duyệt ở khổ desktop và 390 px: tìm kiếm, mở/đóng chi tiết và cả sáu màn hình. Các test tự động dùng fixture/mô phỏng eBay, AI và R2; test HTTP local kiểm tra server thật. Kiểm tra API chính thức ngày 19/11/2026 bằng khóa được chủ máy cho phép đã xác nhận:
+Toàn bộ **384/384 kiểm thử đạt** (25/11/2026), gồm kiểm thử giá trống, sự kiện tải CSV, tìm kiếm, bộ lọc, trạng thái dữ liệu và các bản sửa bảo mật; extension bản 1.4.0. Đã kiểm tra trình duyệt ở khổ desktop và 390 px: tìm kiếm, mở/đóng chi tiết và cả sáu màn hình. Các test tự động dùng fixture/mô phỏng eBay, AI và R2; test HTTP local kiểm tra server thật. Kiểm tra API chính thức ngày 19/11/2026 bằng khóa được chủ máy cho phép đã xác nhận:
 
 - Gemini tạo JSON thành công với `gemini-flash-lite-latest`; dữ liệu mẫu không có kích thước được giữ `null`.
 - eBay xác thực thành công, trả cây danh mục Mỹ `0`, xác minh Category ID `20563` là **Pillows** và lấy item specifics. Kết quả lúc kiểm tra có hai trường bắt buộc **Type**, **Brand** và 31 trường khuyến nghị; luôn dùng dữ liệu API khi tra lại.

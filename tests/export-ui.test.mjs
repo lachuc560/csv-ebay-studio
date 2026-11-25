@@ -11,7 +11,11 @@ const app = readFileSync(new URL('../public/app.js', import.meta.url), 'utf8');
 const start = app.indexOf('// ---- Tab Xuất CSV');
 const end = app.indexOf('// ---- Template eBay nhúng sẵn', start);
 assert.ok(start >= 0 && end > start, 'export handlers must be present');
-const source = app.slice(start, end);
+// Hàm cập nhật state tại chỗ (dùng chung với panel chi tiết) — chạy bản thật.
+const helpersStart = app.indexOf('function updateProductInPlace(');
+const helpersEnd = app.indexOf('// Browse controls filter', helpersStart);
+assert.ok(helpersStart >= 0 && helpersEnd > helpersStart, 'state helpers must be present');
+const source = `const asArray = (v) => (Array.isArray(v) ? v : []);\n${app.slice(helpersStart, helpersEnd)}\n${app.slice(start, end)}`;
 const template = Core.parseEbayTemplate(readFileSync(new URL('../public/templates/ebay-20563.csv', import.meta.url), 'utf8'));
 
 function setup() {

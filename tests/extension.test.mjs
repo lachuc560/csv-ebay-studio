@@ -8,12 +8,45 @@ import { normalizeRecord } from '../public/core.js';
 const root = fileURLToPath(new URL('../', import.meta.url));
 const read = (p) => readFileSync(`${root}${p}`, 'utf-8');
 
-test('extension v2: manifest 1.3.7, có quyền tabs/scripting, KHÔNG còn quyền downloads', () => {
+test('extension v2: manifest 1.4.0, mở dạng bảng bên cạnh (side panel), KHÔNG còn popup/quyền downloads', () => {
   const m = JSON.parse(read('extension-v2/manifest.json'));
-  assert.equal(m.version, '1.3.7');
-  assert.ok(m.permissions.includes('tabs'));
+  assert.equal(m.version, '1.4.0');
+  assert.equal(m.side_panel?.default_path, 'popup.html', 'giao diện mở trong side panel');
+  assert.equal(m.action?.default_popup, undefined, 'không còn popup tự đóng khi đổi tab');
+  assert.equal(m.background?.service_worker, 'dist/background.js');
+  assert.ok(m.permissions.includes('sidePanel'));
+  assert.ok(m.permissions.includes('tabs'), 'bảng bên cạnh cần biết URL tab đang xem khi đổi tab');
   assert.ok(m.permissions.includes('scripting'));
   assert.ok(!m.permissions.includes('downloads'), 'quyền downloads chỉ phục vụ luồng 1 nút Sheet → CSV đã bỏ từ v9.2');
+  assert.ok(Number(m.minimum_chrome_version) >= 116, 'sidePanel.setPanelBehavior cần Chrome 116+');
+});
+
+test('extension v1.4.0: service worker bật mở side panel khi bấm icon', () => {
+  const bg = read('extension-v2/dist/background.js');
+  assert.ok(bg.includes('setPanelBehavior({ openPanelOnActionClick: true })'));
+  execFileSync(process.execPath, ['--check', `${root}extension-v2/dist/background.js`]);
+});
+
+test('extension v1.4.0: bảng bên cạnh theo dõi tab, giữ kết quả từng trang, xin quyền theo website', () => {
+  const js = read('extension-v2/dist/popup.js');
+  assert.ok(js.includes('chrome.tabs.onActivated.addListener'), 'đổi tab thì cập nhật bảng');
+  assert.ok(js.includes('chrome.tabs.onUpdated.addListener'), 'đổi trang trong cùng tab thì cập nhật bảng');
+  assert.ok(js.includes('resultsByUrl'), 'kết quả crawl lưu theo từng trang, quay lại tab vẫn thấy');
+  assert.ok(js.includes('ensureSiteAccess(tab.url)'), 'xin quyền đọc website trước khi chèn content script');
+  assert.ok(js.includes('Đã crawl xong trang trước'), 'crawl xong khi đã chuyển tab vẫn báo kết quả');
+  execFileSync(process.execPath, ['--check', `${root}extension-v2/dist/popup.js`]);
+});
+
+test('extension v1.3.8: popup có timeout, bắt lỗi JSON, nút Lưu luôn được mở lại, gửi trang chờ', () => {
+  const js = read('extension-v2/dist/popup.js');
+  assert.ok(js.includes('AbortSignal.timeout(timeoutMs)'), 'fetch có timeout');
+  assert.ok(js.includes('EXTRACT_TIMEOUT_MS'), 'extract-page dùng timeout dài riêng');
+  assert.ok(js.includes('new ApiError("timeout")'), 'timeout báo lỗi riêng');
+  assert.match(js, /try \{\s*data = await res\.json\(\);/, 'res.json() lỗi không lộ SyntaxError thô');
+  assert.match(js, /finally \{\s*saveBtn\.disabled = false;/, 'nút Lưu luôn mở lại kể cả khi lỗi');
+  assert.ok(js.includes('flushPendingPages'), 'trang lưu local được gửi khi đã kết nối');
+  assert.ok(js.indexOf('await chrome.storage.local.set(settings)') > js.indexOf('const ok = await checkConnection()'), 'chỉ lưu cấu hình sau khi kết nối thành công');
+  execFileSync(process.execPath, ['--check', `${root}extension-v2/dist/popup.js`]);
 });
 
 test('extension v2: content.js có readSohoHome và nối vào extractCsvRecord', () => {
@@ -89,7 +122,7 @@ test('Soho record có specs: normalizeRecord giữ specs để xuất template',
   });
   assert.equal(product.specs.Dimensions, 'H45 x W50 x D50cm / H18 x W20 x D20"');
   assert.equal(product.variants[0].compare_at_price, 2095);
-  assert.ok(existsSync(`${root}dist/extension-v1.3.7.zip`));
+  assert.ok(existsSync(`${root}dist/extension-v1.4.0.zip`));
 });
 
 test('extension v1.3.3: Crawl AI 1 trang — content script đọc dữ liệu thô cho server', () => {

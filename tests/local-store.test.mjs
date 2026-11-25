@@ -101,3 +101,19 @@ test('loadSnapshot/saveSnapshot: snapshot rỗng hợp lệ, save rồi load l�
   saveSnapshot(store, file);
   assert.equal(JSON.parse(readFileSync(file, 'utf-8')).products.length, 1);
 });
+
+test('debounceMs: gom nhiều thay đổi thành 1 lần ghi, flush() ghi ngay', async (t) => {
+  const file = tmpFile(t);
+  const store = new LocalFileStore(file, { debounceMs: 50 });
+  let writes = 0;
+  const origFlush = store.flush.bind(store);
+  store.flush = () => { if (store.dirty) writes++; return origFlush(); };
+  for (let i = 0; i < 100; i++) store.putProduct({ ...sampleProduct, id: `p${i}` });
+  assert.equal(writes, 0, 'chưa ghi ngay trong chế độ debounce');
+  await new Promise((resolve) => setTimeout(resolve, 120));
+  assert.equal(writes, 1, '100 thay đổi chỉ ghi file 1 lần');
+  assert.equal(new LocalFileStore(file).listProducts().length, 100);
+  store.putMeta('config', '{"markupPct":0.5}');
+  store.flush();
+  assert.match(JSON.parse(readFileSync(file, 'utf-8')).meta.config, /0\.5/, 'flush() ghi nốt thay đổi cuối (dùng khi tắt server)');
+});
